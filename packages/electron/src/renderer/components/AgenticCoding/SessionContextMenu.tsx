@@ -7,8 +7,7 @@
  * Menu items are shown conditionally based on which callbacks are provided.
  * Internal actions (copy ID, export, share, set phase) are always available.
  */
-
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, copyToClipboard } from '@nimbalyst/runtime';
 import { sessionShareAtom, shareKeysAtom, removeSessionShareAtom, buildShareUrl } from '../../store';
@@ -73,16 +72,14 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
   const shareInfo = useAtomValue(sessionShareAtom(sessionId));
   const shareKeys = useAtomValue(shareKeysAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
+  const reference = useMemo(() => virtualElement(position.x, position.y), [position.x, position.y]);
 
   const menu = useFloatingMenu({
     placement: 'right-start',
+    reference,
     open: true,
     onOpenChange: (open) => { if (!open) onClose(); },
   });
-
-  useEffect(() => {
-    menu.refs.setPositionReference(virtualElement(position.x, position.y));
-  }, [position.x, position.y, menu.refs]);
 
   const menuItemClass = 'session-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0';
 

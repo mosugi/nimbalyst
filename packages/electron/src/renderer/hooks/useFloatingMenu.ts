@@ -21,7 +21,7 @@
  *   };
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useLayoutEffect } from 'react';
 import {
   useFloating,
   useInteractions,
@@ -33,6 +33,7 @@ import {
   size,
   autoUpdate,
   type Placement,
+  type ReferenceElement,
   type UseFloatingReturn,
   type Strategy,
 } from '@floating-ui/react';
@@ -50,6 +51,8 @@ export interface UseFloatingMenuOptions {
   strategy?: Strategy;
   /** Whether to constrain max-height to available space. Default: true */
   constrainHeight?: boolean;
+  /** Optional precomputed reference element for initial positioning. */
+  reference?: ReferenceElement | null;
   /** External open state control. If provided, the hook uses this instead of internal state. */
   open?: boolean;
   /** External open state setter. Required when `open` is provided. */
@@ -99,6 +102,7 @@ export function useFloatingMenu(options: UseFloatingMenuOptions = {}): UseFloati
     viewportPadding = 8,
     strategy = 'fixed',
     constrainHeight = true,
+    reference = null,
     open: controlledOpen,
     onOpenChange: controlledOnOpenChange,
   } = options;
@@ -135,6 +139,12 @@ export function useFloatingMenu(options: UseFloatingMenuOptions = {}): UseFloati
     middleware,
     whileElementsMounted: autoUpdate,
   });
+
+  useLayoutEffect(() => {
+    if (reference) {
+      floating.refs.setPositionReference(reference);
+    }
+  }, [reference, floating.refs]);
 
   const dismiss = useDismiss(floating.context);
   const role = useRole(floating.context, { role: 'menu' });
