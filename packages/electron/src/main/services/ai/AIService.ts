@@ -2777,7 +2777,7 @@ export class AIService {
           } catch {
             return {
               success: false,
-              error: 'OpenCode CLI not found. Install it with: npm i -g opencode',
+              error: 'OpenCode CLI not found. Install it with: npm i -g opencode-ai',
             };
           }
         }
