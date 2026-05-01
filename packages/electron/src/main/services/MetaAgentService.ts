@@ -331,6 +331,7 @@ export class MetaAgentService {
       }
     }
 
+    const newChildParentId = args.parentSessionIdOverride ?? null;
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {
         window.webContents.send('sessions:refresh-list', {
@@ -339,6 +340,18 @@ export class MetaAgentService {
         });
         if (worktreeId) {
           window.webContents.send('worktree:session-created', { sessionId, worktreeId });
+        }
+        // The general `sessions:refresh-list` only updates `sessionRegistryAtom`.
+        // Workstream surfaces (tab strip, left tree) also read per-parent atoms
+        // (`sessionChildrenAtom`, `workstreamStateAtom`) that the registry
+        // refresh does not touch, so we send a targeted event so listeners can
+        // patch those without re-fetching everything.
+        if (newChildParentId) {
+          window.webContents.send('sessions:child-added', {
+            workspacePath: workspaceId,
+            parentSessionId: newChildParentId,
+            childSessionId: sessionId,
+          });
         }
       }
     }
@@ -441,6 +454,19 @@ export class MetaAgentService {
     await AISessionsRepository.updateMetadata(parent.id, {
       parentSessionId: workstreamId,
     });
+
+    // Tell the renderer the original session is now a child of the workstream
+    // so per-parent atoms (sessionChildrenAtom, workstreamStateAtom) get
+    // patched alongside the registry refresh that fires below.
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('sessions:child-added', {
+          workspacePath: workspaceId,
+          parentSessionId: workstreamId,
+          childSessionId: parent.id,
+        });
+      }
+    }
 
     return { workstreamId, promotedParent: true };
   }

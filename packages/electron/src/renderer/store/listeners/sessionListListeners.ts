@@ -8,7 +8,13 @@
  */
 
 import { store } from '../index';
-import { refreshSessionListAtom, sessionListWorkspaceAtom, sessionRegistryAtom } from '../atoms/sessions';
+import {
+  refreshSessionListAtom,
+  sessionListWorkspaceAtom,
+  sessionRegistryAtom,
+  sessionChildrenAtom,
+  sessionParentIdAtom,
+} from '../atoms/sessions';
 import { workstreamStateAtom } from '../atoms/workstreamState';
 
 // Track pending refresh to debounce rapid-fire events
@@ -110,6 +116,49 @@ export function initSessionListListeners(): () => void {
 
   cleanups.push(
     window.electronAPI.on('worktree:session-created', handleWorktreeSessionCreated)
+  );
+
+  // Handle child-session-added events from main-process flows like spawn_sibling.
+  // The general `sessions:refresh-list` only refreshes `sessionRegistryAtom`.
+  // Workstream tab strip and per-parent groupings read `sessionChildrenAtom`
+  // and `workstreamStateAtom.childSessionIds`, which we have to patch so the
+  // new child shows up without remounting the workstream panel.
+  // Fire-and-forget: do NOT change activeChildId — the parent user shouldn't
+  // have focus stolen by a sibling spawned in the background.
+  const handleChildAdded = (data: {
+    workspacePath: string;
+    parentSessionId: string;
+    childSessionId: string;
+  }) => {
+    const { workspacePath, parentSessionId, childSessionId } = data;
+
+    const currentWorkspace = store.get(sessionListWorkspaceAtom);
+    if (currentWorkspace !== workspacePath) {
+      return;
+    }
+
+    // 1. Patch the parent's children list (deduped).
+    const currentChildren = store.get(sessionChildrenAtom(parentSessionId));
+    if (!currentChildren.includes(childSessionId)) {
+      store.set(sessionChildrenAtom(parentSessionId), [...currentChildren, childSessionId]);
+    }
+
+    // 2. Tell the child who its parent is so derived atoms resolve correctly.
+    store.set(sessionParentIdAtom(childSessionId), parentSessionId);
+
+    // 3. Mirror the change into the unified workstream state so the workstream
+    //    tab strip (which reads childSessionIds) sees the new child.
+    const workstreamState = store.get(workstreamStateAtom(parentSessionId));
+    if (!workstreamState.childSessionIds.includes(childSessionId)) {
+      store.set(workstreamStateAtom(parentSessionId), {
+        type: 'workstream',
+        childSessionIds: [...workstreamState.childSessionIds, childSessionId],
+      });
+    }
+  };
+
+  cleanups.push(
+    window.electronAPI.on('sessions:child-added', handleChildAdded)
   );
 
   // Cleanup function
