@@ -315,21 +315,13 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
   // one canonical event per streaming token before the writer started
   // coalescing -- a small tail would only show the last few tokens of those
   // sessions.
-  useEffect(() => {
-    const cached = tailMessageCache.get(resolvedSessionId);
-    if (cached) {
-      setMessages(cached);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-
+  const fetchMessages = useCallback((id: string) => {
     let cancelled = false;
     window.electronAPI.ai
-      .getTailMessages(resolvedSessionId, 100)
+      .getTailMessages(id, 100)
       .then((msgs: TranscriptViewMessage[]) => {
         if (!cancelled) {
-          tailMessageCache.set(resolvedSessionId, msgs);
+          tailMessageCache.set(id, msgs);
           setMessages(msgs);
           setLoading(false);
         }
@@ -340,9 +332,43 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
           setLoading(false);
         }
       });
-
     return () => { cancelled = true; };
-  }, [resolvedSessionId]);
+  }, []);
+
+  useEffect(() => {
+    const cached = tailMessageCache.get(resolvedSessionId);
+    if (cached) {
+      setMessages(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    return fetchMessages(resolvedSessionId);
+  }, [resolvedSessionId, fetchMessages]);
+
+  // While the peek is open, re-fetch when new transcript events arrive for
+  // this session. Debounced to 1.5 s so rapid streaming chunks don't hammer
+  // the IPC channel.
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = window.electronAPI.on(
+      'transcript:event',
+      (event: { sessionId?: string }) => {
+        if (event?.sessionId !== resolvedSessionId) return;
+        tailMessageCache.delete(resolvedSessionId);
+        if (debounceTimer !== null) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          fetchMessages(resolvedSessionId);
+        }, 1500);
+      },
+    );
+
+    return () => {
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      cleanup?.();
+    };
+  }, [resolvedSessionId, fetchMessages]);
 
   // Position relative to anchor element
   useEffect(() => {
