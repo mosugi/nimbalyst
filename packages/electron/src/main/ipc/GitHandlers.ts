@@ -952,7 +952,10 @@ export function registerGitHandlers(): void {
               log.warn(`[git:commit] Files missing on disk: ${missingOnDisk.map((f) => f.path).join(', ')}`);
             }
 
-            await git.add(filesToStage);
+            // Use --all so deletions are staged correctly. Plain `git add <path>`
+            // errors with "pathspec did not match any files" when the proposal
+            // includes deleted files (e.g., during renames).
+            await git.add(['--all', '--', ...filesToStage]);
 
             // Verify only the selected files are staged
             const status = await git.status();
