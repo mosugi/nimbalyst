@@ -15,7 +15,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-- Open file tabs no longer disappear when switching between tasks/sessions/files. The `WorkstreamEditorTabs` restore effect was running on mount before `workstreamStatesLoadedAtom` had hydrated from disk, reading `openFilePaths: []` (the atom default), restoring zero tabs, and marking restore complete. The persist effect then immediately wrote the empty list back to workspace state, replacing the saved tab list. The restore effect now also waits on `workstreamStatesLoadedAtom === true` (same hydration guard `AgentWorkstreamPanel` already uses for child sessions) before reading `openFilePaths`, so a not-yet-hydrated mount no longer overwrites saved state. Fixes #169.
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.59.2] - 2026-05-07
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Finish IPC listener centralization and lock it in. Migrate the last component-level `electronAPI.on()` callsites (`SessionKanbanBoard` transcript subscription, `theme:list-changed`, `worktree:display-name-updated`, `blitz:created`/`display-name-updated`/`analysis-created`, `voice-mode:preview-audio`, `tracker-sync:config-changed`) to centralized listeners + atoms with the skip-initial-mount idiom. Add a new `transcriptEventSignalAtom` in `sessionTranscriptListeners`. An eslint `no-restricted-syntax` rule now bans `electronAPI.on()` in renderer code outside `store/listeners`, `store/atoms` (singleton init), `store/sessionStateListeners`, services, plugins, and `extensions/panels`, catching both `?.` and `(window as any)` forms so regressions fail at lint time. Updates `docs/IPC_LISTENERS.md` to frame the rule around React lifecycle subscriptions and document the singleton carve-out.
+
+### Fixed
+- Render Codex `file_change` edits as proper red/green diffs instead of empty-baseline whole-file-green diffs for gitignored, never-snapshotted, or post-boot-created files, and stop mis-attributing edits when a recent `sed` outscored the in-flight `file_change` in the same chokidar tick. A new `pre_edit_snapshot` StreamChunk captures the baseline at `item.started` (before Codex applies the patch) and `HistoryManager.createTag` gains a `replaceSpeculative` opt-in so authoritative writers can override speculative bash-watcher tags. Per-change `kind` (`add`/`update`/`delete`) is now honored end-to-end through `SessionFileTracker`, `ToolCallMatcher`, and the transcript renderer so creates and deletes route to `NewFilePreview` / `DiffViewer` correctly. Bash-watcher tags are skipped when no real baseline is available (instead of fabricating an empty one), reviewed pre-edit/incremental-approval snapshots at exact `lastReviewedAt` are skipped to fix tag resurrection on read-only `sed` runs, the redundant watcher-attribution `session_files` insert for `file_change` is dropped so the kind-aware row from the pre-edit path wins, `file_change` is no longer in `CodexEditWindowRegistry`'s always-open set and stale per-turn edit-group entries are cleared on `item.started`, and create-content is pulled from `diffs[].newString` when the matcher had to reconstruct it from a history snapshot. Real-Codex E2E coverage expanded to exercise the full attribution path.
+- Markdown export to PDF now includes the document title in PDF metadata and generates outlines/tagged PDFs from headings, so exported files are properly bookmarked and the title shows in PDF readers. Adds a regression test for the print wrapper title behavior.
+- Open file tabs no longer disappear when switching between tasks/sessions/files. The `WorkstreamEditorTabs` restore effect was running on mount before `workstreamStatesLoadedAtom` had hydrated from disk, reading `openFilePaths: []` (the atom default), restoring zero tabs, and marking restore complete. The persist effect then immediately wrote the empty list back to workspace state, replacing the saved tab list. The restore effect now also waits on `workstreamStatesLoadedAtom === true` (same hydration guard `AgentWorkstreamPanel` already uses for child sessions) before reading `openFilePaths`, so a not-yet-hydrated mount no longer overwrites saved state. Adds a defense-in-depth `hasEverHadTabsRef` latch so the persist effect refuses to write `[]` until the latch flips on the first non-empty tab list, closing two remaining clobber paths (failed `loadWorkstreamStates` IPC, and on-demand `loadWorkstreamState(id)` racing the restore effect). Fixes #169.
 - Settings → Claude Agent SDK panel no longer reads `Version: unknown` on builds where npm workspace dedup hoists `@anthropic-ai/claude-agent-sdk` to the repo-root `node_modules/`. The build-time version read in `electron.vite.config.ts` was hardcoded to `packages/electron/node_modules/...` and silently fell through to `'unknown'` on hoisted installs; it now tries both the local and workspace-root candidates. Closes #60.
 
 ### Removed
