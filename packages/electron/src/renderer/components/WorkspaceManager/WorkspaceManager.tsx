@@ -126,6 +126,7 @@ export const WorkspaceManager: React.FC = () => {
 
   // Operation state
   const [operationInProgress, setOperationInProgress] = useState(false);
+  const [operationLabel, setOperationLabel] = useState('Moving project...');
   const [operationError, setOperationError] = useState<string | null>(null);
 
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -287,6 +288,29 @@ export const WorkspaceManager: React.FC = () => {
     });
   };
 
+  const openRenameDialog = async (workspace: WorkspaceInfo) => {
+    const canMoveResult = await window.electronAPI.projectMigration.canMove(workspace.path);
+    if (!canMoveResult.canMove) {
+      setOperationError(canMoveResult.reason || 'Cannot rename project');
+      return;
+    }
+
+    let renameStats: WorkspaceStats | null = null;
+    try {
+      renameStats = await window.electronAPI.workspaceManager.getWorkspaceStats(workspace.path);
+    } catch (e) {
+      // Stats are optional, continue without them
+    }
+
+    setRenameDialog({
+      visible: true,
+      workspace,
+      newName: workspace.name,
+      error: null,
+      stats: renameStats,
+    });
+  };
+
   const handleContextMenuAction = async (action: 'open' | 'rename' | 'move' | 'remove') => {
     const workspace = contextMenu.workspace;
     setContextMenu(prev => ({ ...prev, visible: false }));
@@ -299,26 +323,7 @@ export const WorkspaceManager: React.FC = () => {
         break;
 
       case 'rename':
-        // Check if can move first
-        const canMoveResult = await window.electronAPI.projectMigration.canMove(workspace.path);
-        if (!canMoveResult.canMove) {
-          setOperationError(canMoveResult.reason || 'Cannot rename project');
-          return;
-        }
-        // Get workspace stats for the rename dialog
-        let renameStats: WorkspaceStats | null = null;
-        try {
-          renameStats = await window.electronAPI.workspaceManager.getWorkspaceStats(workspace.path);
-        } catch (e) {
-          // Stats are optional, continue without them
-        }
-        setRenameDialog({
-          visible: true,
-          workspace,
-          newName: workspace.name,
-          error: null,
-          stats: renameStats,
-        });
+        await openRenameDialog(workspace);
         break;
 
       case 'move':
@@ -372,6 +377,7 @@ export const WorkspaceManager: React.FC = () => {
     const newPath = confirmDialog.destinationPath;
 
     setConfirmDialog(prev => ({ ...prev, visible: false }));
+    setOperationLabel('Moving project...');
     setOperationInProgress(true);
     setOperationError(null);
 
@@ -418,6 +424,7 @@ export const WorkspaceManager: React.FC = () => {
       return;
     }
 
+    setOperationLabel('Renaming project...');
     setOperationInProgress(true);
     setRenameDialog(prev => ({ ...prev, error: null }));
 
@@ -643,13 +650,29 @@ export const WorkspaceManager: React.FC = () => {
                 <h1 className="text-xl font-semibold text-[var(--nim-text)] m-0 mb-1">{selectedWorkspace.name}</h1>
                 <div className="workspace-path text-[13px] text-[var(--nim-text-muted)]">{selectedWorkspace.path}</div>
               </div>
-              <div className="content-actions flex gap-2 shrink-0">
-                <button className="btn nim-btn-primary" onClick={handleOpenWorkspace}>
-                  Open Project
-                </button>
-                <button className="btn nim-btn-secondary !text-[var(--nim-error)] !border-[var(--nim-error-subtle)] hover:!bg-[var(--nim-error-subtle)]" onClick={() => handleRemoveFromRecent()}>
-                  Remove from Recent
-                </button>
+              <div className="content-actions flex flex-col items-end gap-2 shrink-0">
+                <div className="content-actions-primary flex flex-wrap justify-end gap-2">
+                  <button className="btn nim-btn-primary" onClick={handleOpenWorkspace}>
+                    Open Project
+                  </button>
+                  <button className="btn nim-btn-secondary !text-[var(--nim-error)] !border-[var(--nim-error-subtle)] hover:!bg-[var(--nim-error-subtle)]" onClick={() => handleRemoveFromRecent()}>
+                    Remove from Recent
+                  </button>
+                </div>
+                <div className="content-actions-secondary flex flex-wrap justify-end gap-2">
+                  <button
+                    className="btn nim-btn-secondary !h-8 !px-2.5 !text-[12px]"
+                    onClick={() => openRenameDialog(selectedWorkspace)}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    className="btn nim-btn-secondary !h-8 !px-2.5 !text-[12px]"
+                    onClick={() => handleMoveProject(selectedWorkspace)}
+                  >
+                    Move
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -900,7 +923,7 @@ export const WorkspaceManager: React.FC = () => {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[4000]">
           <div className="bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-lg shadow-xl p-6 flex items-center gap-3">
             <div className="spinner w-5 h-5 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin"></div>
-            <span className="text-[14px] text-[var(--nim-text)]">Moving project...</span>
+            <span className="text-[14px] text-[var(--nim-text)]">{operationLabel}</span>
           </div>
         </div>
       )}
