@@ -1496,14 +1496,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       }, INDEX_STABILITY_MS);
     };
 
-    indexWs.onclose = () => {
+    indexWs.onclose = (event: CloseEvent) => {
       stopPingInterval();
       indexConnected = false;
       indexWs = null;
       clearIndexReady();
       stopDeviceAnnounceInterval();
 
-      console.log('[CollabV3] Disconnected from index');
+      // Server rejections (bad/expired JWT, policy violations) arrive as a
+      // close frame, not an error event. Log code/reason so auth failures
+      // aren't opaque next time. 1006 is a synthetic "abnormal closure"
+      // emitted by the WS client when the underlying socket dies; that's
+      // network/transport, not server policy.
+      console.log(
+        `[CollabV3] Disconnected from index (code=${event?.code ?? 'unknown'}, reason="${event?.reason ?? ''}", wasClean=${event?.wasClean ?? 'unknown'}, reachedOpen=${reachedOpen})`,
+      );
       // Pre-open failure: the network likely isn't actually up yet. Keep
       // reconnect attempts fast by not letting the failure bump the backoff
       // exponent. If we're in a flaky post-wake window we want to keep probing
@@ -1512,7 +1519,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     };
 
     indexWs.onerror = (event) => {
-      // Note: ErrorEvent only exists in browser environments, not Node.js
+      // WS `onerror` carries almost no info -- the actionable signal (close
+      // code / reason) arrives on `onclose`, which always fires after error.
+      // Log a stable summary here and let `onclose` add the close-frame
+      // details so we never get the previous "[object Object]" placeholder.
       const errorInfo = typeof ErrorEvent !== 'undefined' && event instanceof ErrorEvent
         ? { message: event.message, error: event.error }
         : { type: event.type };
@@ -1744,7 +1754,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           case 'indexBroadcast': {
             // Another device updated a session - decrypt sensitive fields first
             const entry = message.session;
-            console.log('[CollabV3] DEBUG indexBroadcast received for session:', entry.sessionId, 'hasClientMeta:', !!entry.encryptedClientMetadata, 'fromConnectionId:', message.fromConnectionId);
+            // console.log('[CollabV3] DEBUG indexBroadcast received for session:', entry.sessionId, 'hasClientMeta:', !!entry.encryptedClientMetadata, 'fromConnectionId:', message.fromConnectionId);
 
             // Decrypt projectId - encrypted projectId is required
             let projectId: string;
@@ -1823,11 +1833,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 console.error('[CollabV3] Failed to decrypt index entry queued prompts:', err);
               }
             } else {
-              console.log('[CollabV3] DEBUG no encrypted prompts to decrypt:', {
-                hasEncryptedPrompts: !!entry.encryptedQueuedPrompts,
-                length: entry.encryptedQueuedPrompts?.length ?? 0,
-                hasEncryptionKey: !!config.encryptionKey,
-              });
+              // console.log('[CollabV3] DEBUG no encrypted prompts to decrypt:', {
+              //   hasEncryptedPrompts: !!entry.encryptedQueuedPrompts,
+              //   length: entry.encryptedQueuedPrompts?.length ?? 0,
+              //   hasEncryptionKey: !!config.encryptionKey,
+              // });
             }
             // If no encrypted prompts, queuedPrompts stays undefined
 
@@ -2474,14 +2484,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           resolve();
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event: CloseEvent) => {
+          // Auth rejections (expired/invalid JWT) arrive here as a close
+          // frame, not as an error event. Logging code/reason makes the
+          // root cause visible the next time something goes wrong.
+          console.log(
+            `[CollabV3] Session WebSocket closed for ${sessionId} (code=${event?.code ?? 'unknown'}, reason="${event?.reason ?? ''}", wasClean=${event?.wasClean ?? 'unknown'})`,
+          );
           updateStatus(sessionId, { connected: false });
           sessions.delete(sessionId);
         };
 
         ws.onerror = (event) => {
-          // Extract useful error info from the event
-          // Note: ErrorEvent only exists in browser environments, not Node.js
+          // onerror itself carries little -- the close frame that follows has
+          // the actionable code/reason. Keep this log as a breadcrumb only.
           const errorInfo = typeof ErrorEvent !== 'undefined' && event instanceof ErrorEvent
             ? { message: event.message, error: event.error }
             : { type: event.type, target: (event.target as WebSocket)?.url };

@@ -559,7 +559,7 @@ if (!allowMultipleInstances) {
             // On Windows the protocol URL is passed as the last argument
             const deepLinkUrl = argv.find(arg => arg.startsWith('nimbalyst://'));
             if (deepLinkUrl) {
-                logger.main.info(`[SingleInstance] Found deep link in argv: ${deepLinkUrl}`);
+                logger.main.info('[SingleInstance] Found deep link in argv:', summarizeDeepLink(deepLinkUrl));
                 handleDeepLink(deepLinkUrl);
             }
 
@@ -640,10 +640,40 @@ if (!allowMultipleInstances) {
 // Track pending deep link URL
 let pendingDeepLinkUrl: string | null = null;
 
+// Sensitive query params that must not be logged verbatim. Anything not in
+// this set is logged as-is so worker-supplied error codes/messages are visible.
+const SENSITIVE_DEEP_LINK_PARAMS = new Set([
+    'session_token',
+    'session_jwt',
+    'token',
+    'stytch_token',
+    'oauth_state',
+    'state',
+]);
+
+/**
+ * Summarize a deep-link URL for logging. Keeps host/pathname intact, replaces
+ * any sensitive param value with `[redacted:N]` (length only), and passes
+ * everything else through. Worker error codes (`error`, `error_description`,
+ * `stytch_error_type`) end up logged verbatim so a failed sign-in is diagnosable.
+ */
+function summarizeDeepLink(url: string): { host: string; pathname: string; params: Record<string, string> } | { rawUrl: string; parseError: string } {
+    try {
+        const parsed = new URL(url);
+        const params: Record<string, string> = {};
+        for (const [key, value] of parsed.searchParams.entries()) {
+            params[key] = SENSITIVE_DEEP_LINK_PARAMS.has(key) ? `[redacted:${value.length}]` : value;
+        }
+        return { host: parsed.host, pathname: parsed.pathname, params };
+    } catch (err) {
+        return { rawUrl: url, parseError: String(err) };
+    }
+}
+
 // Handle deep link URLs (nimbalyst://...)
 app.on('open-url', (event, url) => {
     event.preventDefault();
-    logger.main.info(`open-url event received: ${url}`);
+    logger.main.info('[DeepLink] open-url event:', summarizeDeepLink(url));
 
     if (app.isReady()) {
         handleDeepLink(url);
@@ -665,6 +695,24 @@ async function handleDeepLink(url: string): Promise<void> {
             const userId = parsed.searchParams.get('user_id');
             const email = parsed.searchParams.get('email');
             const expiresAt = parsed.searchParams.get('expires_at');
+
+            // Surface any worker-supplied error indicators before checking for
+            // session_token. The collabv3 worker may redirect back with
+            // `?error=...&error_description=...` instead of a session, and
+            // until now we silently fell into the "missing session_token"
+            // branch with no clue why.
+            const errorCode = parsed.searchParams.get('error');
+            const errorDescription = parsed.searchParams.get('error_description');
+            const stytchErrorType = parsed.searchParams.get('stytch_error_type');
+            if (errorCode || errorDescription || stytchErrorType) {
+                logger.main.error('[DeepLink] Auth callback returned error from server:', {
+                    error: errorCode,
+                    errorDescription,
+                    stytchErrorType,
+                    allParams: summarizeDeepLink(url),
+                });
+                return;
+            }
 
             if (sessionToken) {
                 const orgId = parsed.searchParams.get('org_id');
@@ -702,7 +750,9 @@ async function handleDeepLink(url: string): Promise<void> {
                     logger.main.error('[DeepLink] Failed to reinitialize sync after auth:', syncError);
                 }
             } else {
-                logger.main.error('[DeepLink] Auth callback missing session_token');
+                // No session_token and no recognized error param -- log everything
+                // we got so the worker's actual response shape is visible.
+                logger.main.error('[DeepLink] Auth callback missing session_token; full params:', summarizeDeepLink(url));
             }
         } else if (parsed.host === 'install' || parsed.pathname?.startsWith('/install/')) {
             // Handle extension install: nimbalyst://install/com.nimbalyst.excalidraw
@@ -717,7 +767,7 @@ async function handleDeepLink(url: string): Promise<void> {
                 logger.main.warn('[DeepLink] Extension install missing extension ID');
             }
         } else {
-            logger.main.warn(`[DeepLink] Unknown deep link: ${url}`);
+            logger.main.warn('[DeepLink] Unknown deep link:', summarizeDeepLink(url));
         }
     } catch (error) {
         logger.main.error('[DeepLink] Failed to handle deep link:', error);
