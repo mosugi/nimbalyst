@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Bug-report anonymizer now scrubs workspace paths and Windows path-form variants, not just the home dir. (#396)
 - Imported Claude Code sessions now show the model actually used instead of always Sonnet. (#394)
+- CollabV3 sync no longer hammers the server with rejected WebSocket connections when the JWT subject does not match the configured user ID; the client refuses such connections locally, backs off pre-open failures exponentially up to 5 minutes, and only retries on an explicit reconnect signal.
 - Shared docs now defer markdown bootstrap until server sync to avoid duplicated content, and share-to-team preserves full custom-editor suffixes like `mockup.html` when routing collaborative docs.
 - iOS session index sync now preserves workstream, worktree, pin, and naming metadata so sessions do not reappear as duplicate or free-floating rows.
 - Transcript, model-picker, session-history, and shared editor dropdown menus now use floating-ui portals so they stay visible instead of clipping inside panels.
