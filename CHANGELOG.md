@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Seeded `nimbalyst-local/ai-actions.md` now includes example actions for launching sibling planning and worktree implementation sessions.
 - Tracker screen now has a true table view with aligned headers, sortable columns, resizable widths, and shared row interactions.
 - "Share to Team" now opens a folder picker dialog so you can choose the destination folder (and rename the shared document) before sharing; the last-used folder is remembered per workspace.
+- Shared documents can now remember their local source file, surface "uploaded from" / re-upload actions, and relink missing local files after sharing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Imported Claude Code sessions now show the model actually used instead of always Sonnet. (#394)
 - CollabV3 sync no longer hammers the server with rejected WebSocket connections when the JWT subject does not match the configured user ID; the client refuses such connections locally, backs off pre-open failures exponentially up to 5 minutes, and only retries on an explicit reconnect signal.
 - Shared docs now defer markdown bootstrap until server sync to avoid duplicated content, and share-to-team preserves full custom-editor suffixes like `mockup.html` when routing collaborative docs.
+- Shared-document tabs now respect Find and Close Tab menu commands, and dev-mode HMR no longer stacks stale shared-doc reconnect listeners after reloads.
 - iOS session index sync now preserves workstream, worktree, pin, and naming metadata so sessions do not reappear as duplicate or free-floating rows.
 - Transcript, model-picker, session-history, and shared editor dropdown menus now use floating-ui portals so they stay visible instead of clipping inside panels.
 - Agent transcript no longer repaints on every streamed token or keystroke, so text selection inside running sessions stays usable.
