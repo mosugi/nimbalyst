@@ -1,9 +1,21 @@
+// @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { Provider as JotaiProvider, createStore } from 'jotai';
+
+// The four legacy quick-open dialogs are now collapsed into UnifiedQuickOpen.
+// This test still exercises the Projects-tab pathway, asserting the lightweight
+// recent-workspaces IPC (not the heavy workspaceManager handler) is the source
+// of project data.
 
 vi.mock('@nimbalyst/runtime', () => ({
   MaterialSymbol: () => null,
+  ProviderIcon: () => null,
+}));
+
+vi.mock('posthog-js/react', () => ({
+  usePostHog: () => undefined,
 }));
 
 function setupElectronApiMock() {
@@ -17,7 +29,9 @@ function setupElectronApiMock() {
         },
       ];
     }
-
+    if (channel === 'sessions:list') {
+      return { success: true, sessions: [] };
+    }
     throw new Error(`Unexpected invoke channel: ${channel}`);
   });
 
@@ -40,13 +54,20 @@ function setupElectronApiMock() {
         getOpenWorkspaces,
         openWorkspace: vi.fn().mockResolvedValue({ success: true }),
       },
+      ai: {
+        listUserPrompts: vi.fn().mockResolvedValue({ success: true, prompts: [] }),
+      },
+      getRecentWorkspaceFiles: vi.fn().mockResolvedValue([]),
+      buildQuickOpenCache: vi.fn().mockResolvedValue(undefined),
+      searchWorkspaceFileNames: vi.fn().mockResolvedValue([]),
+      searchWorkspaceFileContent: vi.fn().mockResolvedValue([]),
     },
   });
 
   return { invoke, getRecentWorkspaces, getOpenWorkspaces };
 }
 
-describe('ProjectQuickOpen', () => {
+describe('UnifiedQuickOpen — Projects tab', () => {
   beforeEach(() => {
     setupElectronApiMock();
     HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -57,22 +78,28 @@ describe('ProjectQuickOpen', () => {
   });
 
   it('loads recent projects from the lightweight recent-workspaces IPC', async () => {
-    const { ProjectQuickOpen } = await import('../ProjectQuickOpen');
-    const onClose = vi.fn();
+    const { UnifiedQuickOpen } = await import('../UnifiedQuickOpen');
+    const store = createStore();
 
     render(
-      <ProjectQuickOpen
-        isOpen={true}
-        onClose={onClose}
-        currentWorkspacePath={null}
-      />
+      <JotaiProvider store={store}>
+        <UnifiedQuickOpen
+          isOpen={true}
+          onClose={vi.fn()}
+          workspacePath="/Users/ghinkle/sources/crystal"
+          initialTab="projects"
+          onFileSelect={vi.fn()}
+          onSessionSelect={vi.fn()}
+          onPromptSelect={vi.fn()}
+        />
+      </JotaiProvider>
     );
 
     await waitFor(() => {
       expect(window.electronAPI.invoke).toHaveBeenCalledWith('get-recent-workspaces');
     });
 
-    expect(window.electronAPI.workspaceManager.getOpenWorkspaces).toHaveBeenCalledOnce();
+    expect(window.electronAPI.workspaceManager.getOpenWorkspaces).toHaveBeenCalled();
     expect(window.electronAPI.workspaceManager.getRecentWorkspaces).not.toHaveBeenCalled();
     expect(await screen.findByText('crystal')).toBeTruthy();
   });

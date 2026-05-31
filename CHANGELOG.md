@@ -9,21 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-<!-- New features go here -->
-
-### Changed
-<!-- Changes to existing functionality go here -->
-
-### Fixed
-<!-- Bug fixes go here -->
-
-### Removed
-<!-- Removed features go here -->
-
-## [0.63.1] - 2026-05-31
-
-
-### Added
 - Claude Opus 4.8 is now selectable in the Claude provider (1M context, dateless ID `claude-opus-4-8`) and is the default Claude model for new installs. (#473)
 - Claude Code variants `opus-4-7` and `opus-4-7-1m` pinned to Opus 4.7 so it stays selectable after the canonical `opus` alias was bumped to 4.8. (#473)
 <!-- New features go here -->
@@ -35,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Empty AI session panels now cycle through 15 additional contextual tips: the four embedded editors (Excalidraw, MockupLM, DataModelLM, spreadsheets), shared session and document links, CLAUDE.md standing instructions, auto-commit mode, document history (Cmd+Y), quick open (Cmd+O), content search (Cmd+Shift+F), mobile pairing, scheduled wakeups, action prompts, and the lightning interrupt button.
 - Session history search supports a virtual `#worktree` tag that filters to all worktree sessions and their children.
 - Shared Documents file tree now has inline search by document name or folder path.
+- Unified Quick Open: one tabbed dialog replaces the four separate Files / Sessions / Prompts / Projects quick-open dialogs, adds a real Trackers tab, a comma-separated file-mask filter (same syntax as the git extension) on Files / In Files, and a type filter on Trackers. ⌘O / ⌘⇧F / ⌘L / ⌘⇧L / ⌘⇧P each open the unified dialog on their tab and also jump between tabs while it's open.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -49,7 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
-- SQLite migration dry-run and full migration no longer crash in packaged builds with "Cannot find module 'electron'"; `SQLiteBackupService` was pulling `electron-log/main` into the worker bundle, where `require('electron')` is not resolvable.
 - AI sessions no longer appear to keep running forever on the mobile app after a desktop turn ends; v0.63.0 routed the "isExecuting" signal through a new lightweight wire message the server and iOS did not yet understand, so the running indicator never cleared.
 - Lexical selection-toolbar format dropdowns now render inside the editor root when portaled, so shared dropdown styling and theme backgrounds no longer disappear.
 - AskUserQuestion widget no longer goes blank (header-only "Waiting..." with no options) after switching from Agent mode to Files mode and back when the same session is open in both panels.
@@ -74,8 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Monaco editor now picks the right dark or light base theme for extension themes whose IDs don't include `-dark` (e.g. rose-pine), so the editor matches the rest of the UI.
 - Developer Dashboard no longer crashes when database stats arrive in the SQLite instrumentation shape instead of the legacy per-table counts shape.
 - Extension uninstall now also prunes settings for providers contributed under `aiAgentProviders`, not just `aiProviders`, so the ghost-provider cleanup keeps working with the new contribution point. (follow-up to #446)
-- Session list search and tag-filter UI stay mounted when a tag filter hides every session, so you can clear the filter instead of being stuck in an empty-state view. (#470)
-- "Import Claude Agent Sessions" dialog no longer re-opens on every workspace switch after dismissing it once. (#481)
 
 ### Removed
 <!-- Removed features go here -->
