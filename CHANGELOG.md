@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool calls (Read, Bash, Edit, commit proposal, etc.) no longer get stuck rendering "running" when multiple AI sessions are open at once.
 - Workstream parent sessions now bubble to the top of the left pane when a child session has new activity.
 - Interactive widgets (AskUserQuestion, ExitPlanMode, GitCommitProposal) render correctly when called via their MCP-prefixed tool names.
+- Workspace search no longer floods main.log with "ripgrep not found at" probe lines on every keystroke; the resolved binary path is cached per process.
 
 ### Removed
 <!-- Removed features go here -->
