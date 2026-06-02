@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Historical user prompts (everything older than the searchable-text extractor's June 1 ship date) now show up in Quick Open. The AgentMessagesBackfill pass was silently aborting on its first UPDATE because the FTS5 AFTER UPDATE trigger ran `'delete'` with NULL content against an inconsistent shadow index and raised SQLITE_CORRUPT_VTAB. Migrations rebuild the FTS index and split the trigger into WHEN-guarded delete/insert halves so the 'delete' command only fires when there is a row in the index to delete.
 - Tracker items with legacy labels no longer crash the backfill on every reconnect, so they actually reach the team room.
 - Tracker label arrays no longer pick up a phantom leading `null` on the SQLite backend.
+- New Worktree button no longer stays disabled in git repos when the initial probe races mount.
+- Calc Sheets PARSE ERR rows are now legible in dark mode; error text and banner colors come from theme-aware CSS vars instead of a hardcoded dark red.
 
 ### Removed
 <!-- Removed features go here -->
