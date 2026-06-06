@@ -227,6 +227,8 @@ function renderCodexSkillMarkdown(descriptor: AgentWorkflowDescriptor, codexName
   if (descriptor.kind === 'command') {
     lines.push(`Use this when the user explicitly invokes \`/${codexName}\` or requests the "${descriptor.name}" workflow.`);
     lines.push('');
+    lines.push(renderCodexCommandInvocationNote(codexName, descriptor.argumentHint));
+    lines.push('');
     lines.push('Follow this workflow:');
     lines.push('');
   } else {
@@ -235,7 +237,11 @@ function renderCodexSkillMarkdown(descriptor: AgentWorkflowDescriptor, codexName
   }
 
   if (descriptor.body?.trim()) {
-    lines.push(descriptor.body.trim());
+    lines.push(
+      descriptor.kind === 'command'
+        ? rewriteCommandBodyForCodex(descriptor.body.trim(), codexName, descriptor.argumentHint)
+        : descriptor.body.trim()
+    );
     lines.push('');
   } else if (descriptor.description) {
     lines.push(descriptor.description);
@@ -243,6 +249,31 @@ function renderCodexSkillMarkdown(descriptor: AgentWorkflowDescriptor, codexName
   }
 
   return `${lines.join('\n').trim()}\n`;
+}
+
+function renderCodexCommandInvocationNote(codexName: string, argumentHint?: string): string {
+  if (argumentHint) {
+    return `Important: treat the text after \`/${codexName}\` as the command arguments ${argumentHint}. Use those arguments anywhere the original Claude command expects its argument placeholder.`;
+  }
+
+  return `Important: treat the text after \`/${codexName}\` as the command arguments. Use those arguments anywhere the original Claude command expects its argument placeholder.`;
+}
+
+function rewriteCommandBodyForCodex(body: string, codexName: string, argumentHint?: string): string {
+  const standaloneReplacement = argumentHint
+    ? `Use the invoking message text after \`/${codexName}\` as the command arguments ${argumentHint}. If the user did not provide explicit slash-command arguments, use the surrounding request text instead.`
+    : `Use the invoking message text after \`/${codexName}\` as the command arguments. If the user did not provide explicit slash-command arguments, use the surrounding request text instead.`;
+
+  return body
+    .split('\n')
+    .map((line) => {
+      if (line.trim() === '$ARGUMENTS') {
+        return standaloneReplacement;
+      }
+
+      return line.replace(/\$ARGUMENTS\b/g, "the user's command arguments");
+    })
+    .join('\n');
 }
 
 async function ensureFileMatches(targetPath: string, content: string | Buffer): Promise<void> {

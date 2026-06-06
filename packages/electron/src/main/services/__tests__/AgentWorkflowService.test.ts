@@ -181,6 +181,49 @@ Inspect the codebase, write the plan, and capture open questions.
     expect(codexSkill).toContain('description: "Create a new plan document for tracking work."');
   });
 
+  it('rewrites Claude command argument placeholders into Codex-friendly guidance', async () => {
+    const commandsDir = path.join(workspacePath, '.claude', 'commands');
+    fs.mkdirSync(commandsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(commandsDir, 'investigate.md'),
+      `---
+description: Investigate before implementing
+argument-hint: [issue-or-problem]
+---
+
+# Investigate
+
+## User's Problem Description
+
+$ARGUMENTS
+`,
+      'utf-8',
+    );
+
+    const service = new AgentWorkflowService(workspacePath, {
+      userHomePath,
+      extensionDirectoriesLoader: async () => [],
+      nativeClaudePluginPathsLoader: async () => [],
+      releaseChannelLoader: () => 'stable',
+    });
+
+    await service.listEntries({ provider: 'openai-codex' });
+
+    const codexSkillPath = path.join(
+      workspacePath,
+      '.agents',
+      'skills',
+      '.nimbalyst-generated',
+      'investigate',
+      'SKILL.md',
+    );
+    const codexSkill = fs.readFileSync(codexSkillPath, 'utf-8');
+
+    expect(codexSkill).toContain('Important: treat the text after `/investigate` as the command arguments [issue-or-problem].');
+    expect(codexSkill).toContain('Use the invoking message text after `/investigate` as the command arguments [issue-or-problem].');
+    expect(codexSkill).not.toContain('$ARGUMENTS');
+  });
+
   it('imports legacy Claude plugins into the registry and exports command aliases for Codex', async () => {
     const pluginRoot = path.join(workspacePath, 'legacy-plugin');
     fs.mkdirSync(path.join(pluginRoot, '.claude-plugin'), { recursive: true });
