@@ -2,6 +2,10 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../../utils/clipboard', () => ({
+  copyImageToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { ZoomableImageSurface } from '../ZoomableImageSurface';
 
 class ResizeObserverMock {
@@ -61,5 +65,25 @@ describe('ZoomableImageSurface', () => {
     await waitFor(() => {
       expect(screen.getByTestId('zoomable-image-zoom').textContent).toBe('50%');
     });
+  });
+
+  it('copies the current image from the toolbar', async () => {
+    const { copyImageToClipboard } = await import('../../../../utils/clipboard');
+
+    render(
+      <div style={{ width: 400, height: 300 }}>
+        <ZoomableImageSurface src="test.png" alt="Test image" copyFilePath="/tmp/test.png" />
+      </div>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy image' }));
+
+    await waitFor(() => {
+      expect(copyImageToClipboard).toHaveBeenCalledWith({
+        src: 'test.png',
+        filePath: '/tmp/test.png',
+      });
+    });
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeDefined();
   });
 });

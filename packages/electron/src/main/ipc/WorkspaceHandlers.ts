@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell, clipboard } from 'electron';
+import { BrowserWindow, app, shell, clipboard, nativeImage } from 'electron';
 import { readFileSync, readdirSync, statSync, existsSync, promises as fsPromises } from 'fs';
 import * as fs from 'fs';
 import { join, basename, dirname, extname } from 'path';
@@ -1029,6 +1029,29 @@ export function registerWorkspaceHandlers() {
     safeHandle('copy-to-clipboard', async (_event, text: string) => {
         clipboard.writeText(text);
         return { success: true };
+    });
+
+    safeHandle('copy-image-to-clipboard', async (_event, payload: { filePath?: string; dataUrl?: string }) => {
+        try {
+            let image;
+            if (payload.filePath) {
+                image = nativeImage.createFromPath(payload.filePath);
+            } else if (payload.dataUrl) {
+                image = nativeImage.createFromDataURL(payload.dataUrl);
+            } else {
+                return { success: false, error: 'No image source provided' };
+            }
+
+            if (image.isEmpty()) {
+                return { success: false, error: 'Failed to decode image for clipboard' };
+            }
+
+            clipboard.writeImage(image);
+            return { success: true };
+        } catch (error: any) {
+            console.error('Error copying image to clipboard:', error);
+            return { success: false, error: error.message };
+        }
     });
 
     safeHandle('read-from-clipboard', async () => {

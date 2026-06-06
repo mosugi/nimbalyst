@@ -67,6 +67,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ filePath, fileName }) 
       <ZoomableImageSurface
         src={imageSrc}
         alt={fileName}
+        copyFilePath={filePath}
         className="h-full"
         toolbarLabel={(
           <div className="flex min-w-0 items-center gap-3 text-xs text-nim-muted">

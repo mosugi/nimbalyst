@@ -333,6 +333,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // for the File (e.g. synthetic blobs).
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   copyToClipboard: (text: string) => ipcRenderer.invoke('copy-to-clipboard', text),
+  copyImageToClipboard: (payload: { filePath?: string; dataUrl?: string }) =>
+    ipcRenderer.invoke('copy-image-to-clipboard', payload),
   readClipboard: () => ipcRenderer.invoke('read-from-clipboard'),
 
   // File change event listeners

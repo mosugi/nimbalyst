@@ -715,6 +715,7 @@ const Lightbox: React.FC<{
       <ZoomableImageSurface
         src={localAssetUrl(images[selectedIndex].image!.path)}
         alt={images[selectedIndex].description}
+        copyFilePath={images[selectedIndex].image!.path}
         toolbarLabel={(
           <div className="min-w-0 truncate font-mono text-sm text-nim" title={images[selectedIndex].description}>
             {images[selectedIndex].description}

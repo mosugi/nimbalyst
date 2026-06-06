@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { copyImageToClipboard } from '../../../utils/clipboard';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -9,6 +10,7 @@ type ZoomMode = 'fit' | 'custom';
 export interface ZoomableImageSurfaceProps {
   src: string;
   alt: string;
+  copyFilePath?: string;
   className?: string;
   imageClassName?: string;
   toolbarLabel?: React.ReactNode;
@@ -24,6 +26,7 @@ export interface ZoomableImageSurfaceProps {
 export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
   src,
   alt,
+  copyFilePath,
   className = '',
   imageClassName = '',
   toolbarLabel,
@@ -47,6 +50,7 @@ export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
     startScrollLeft: number;
     startScrollTop: number;
   } | null>(null);
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -71,7 +75,14 @@ export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
     setZoomMode(defaultMode === 'actual' ? 'custom' : 'fit');
     setCustomScale(defaultMode === 'actual' ? 1 : 1);
     setNaturalSize(null);
+    setCopyState('idle');
   }, [defaultMode, src]);
+
+  useEffect(() => {
+    if (copyState !== 'copied' && copyState !== 'error') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
 
   const fitScale = useMemo(() => {
     if (!naturalSize || viewportSize.width <= 0 || viewportSize.height <= 0) {
@@ -114,6 +125,17 @@ export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
     };
     setNaturalSize(dimensions);
     onImageLoad?.(dimensions);
+  };
+
+  const handleCopyImage = async () => {
+    try {
+      setCopyState('copying');
+      await copyImageToClipboard({ src, filePath: copyFilePath });
+      setCopyState('copied');
+    } catch (error) {
+      console.error('[ZoomableImageSurface] Failed to copy image:', error);
+      setCopyState('error');
+    }
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -202,6 +224,20 @@ export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
               onClick={() => handleZoomStep(1.25)}
             >
               +
+            </button>
+            <button
+              type="button"
+              className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void handleCopyImage()}
+              disabled={copyState === 'copying'}
+            >
+              {copyState === 'copying'
+                ? 'Copying...'
+                : copyState === 'copied'
+                  ? 'Copied'
+                  : copyState === 'error'
+                    ? 'Copy failed'
+                    : 'Copy image'}
             </button>
           </div>
         </div>

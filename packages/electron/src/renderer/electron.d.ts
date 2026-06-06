@@ -263,6 +263,7 @@ interface ElectronAPI {
   copyFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   getPathForFile: (file: File) => string;
   copyToClipboard: (text: string) => Promise<{ success: boolean }>;
+  copyImageToClipboard: (payload: { filePath?: string; dataUrl?: string }) => Promise<{ success: boolean; error?: string }>;
   readClipboard: () => Promise<{ success: boolean; text?: string }>;
 
   // Settings operations
