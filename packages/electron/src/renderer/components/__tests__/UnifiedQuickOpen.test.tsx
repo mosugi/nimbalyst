@@ -138,9 +138,50 @@ describe('UnifiedQuickOpen — Projects tab', () => {
       expect(window.electronAPI.searchWorkspaceFileNames).toHaveBeenCalledWith(
         '/Users/ghinkle/sources/crystal',
         'crystal',
+        undefined,
       );
     });
 
     expect(screen.getByText('aurora')).toBeTruthy();
+  });
+
+  it('passes the file mask to file-name search before result truncation', async () => {
+    const { UnifiedQuickOpen } = await import('../UnifiedQuickOpen');
+    const store = createStore();
+
+    render(
+      <JotaiProvider store={store}>
+        <UnifiedQuickOpen
+          isOpen={true}
+          onClose={vi.fn()}
+          workspacePath="/Users/ghinkle/sources/crystal"
+          initialTab="files"
+          onFileSelect={vi.fn()}
+          onSessionSelect={vi.fn()}
+          onPromptSelect={vi.fn()}
+        />
+      </JotaiProvider>
+    );
+
+    fireEvent.click(screen.getByTitle('Mask'));
+    fireEvent.change(screen.getByPlaceholderText('*.ts,*.tsx'), {
+      target: { value: '*.md' },
+    });
+    fireEvent.keyDown(screen.getByPlaceholderText('*.ts,*.tsx'), {
+      key: 'Enter',
+      code: 'Enter',
+    });
+
+    fireEvent.change(screen.getByTestId('unified-quick-open-search'), {
+      target: { value: 'tracker' },
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI.searchWorkspaceFileNames).toHaveBeenCalledWith(
+        '/Users/ghinkle/sources/crystal',
+        'tracker',
+        { fileMask: '*.md' },
+      );
+    });
   });
 });

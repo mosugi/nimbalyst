@@ -273,7 +273,7 @@ interface ElectronAPI {
   // QuickOpen operations
   buildQuickOpenCache: (workspacePath: string) => Promise<{ success: boolean; fileCount?: number; error?: string }>;
   searchWorkspaceFiles: (workspacePath: string, query: string) => Promise<any[]>;
-  searchWorkspaceFileNames: (workspacePath: string, query: string) => Promise<any[]>;
+  searchWorkspaceFileNames: (workspacePath: string, query: string, options?: { fileMask?: string | null }) => Promise<any[]>;
   searchWorkspaceFileContent: (workspacePath: string, query: string) => Promise<any[]>;
   getRecentWorkspaceFiles: (workspacePath?: string) => Promise<string[]>;
   addToWorkspaceRecentFiles: (filePath: string) => void;

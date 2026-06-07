@@ -376,7 +376,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // QuickOpen operations
   buildQuickOpenCache: (workspacePath: string) => ipcRenderer.invoke('build-quick-open-cache', workspacePath),
   searchWorkspaceFiles: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-files', workspacePath, query),
-  searchWorkspaceFileNames: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-file-names', workspacePath, query),
+  searchWorkspaceFileNames: (workspacePath: string, query: string, options?: { fileMask?: string | null }) =>
+    ipcRenderer.invoke('search-workspace-file-names', workspacePath, query, options),
   searchWorkspaceFileContent: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-file-content', workspacePath, query),
   getRecentWorkspaceFiles: (workspacePath?: string) => ipcRenderer.invoke('get-recent-workspace-files', workspacePath),
   addToWorkspaceRecentFiles: (filePath: string) => ipcRenderer.send('add-to-workspace-recent-files', filePath),

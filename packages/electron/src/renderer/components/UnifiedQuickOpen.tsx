@@ -631,6 +631,7 @@ const FilesPane: React.FC<FilesPaneProps> = memo(({
         const fileNameResults = await api.searchWorkspaceFileNames(
           workspacePath,
           query,
+          extFilter ? { fileMask: extFilter } : undefined,
         );
         if (Array.isArray(fileNameResults)) {
           const processed: FileItem[] = fileNameResults.map((r: any) => ({
@@ -678,7 +679,7 @@ const FilesPane: React.FC<FilesPaneProps> = memo(({
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
-  }, [query, workspacePath, recentFiles, posthog]);
+  }, [query, extFilter, workspacePath, recentFiles, posthog]);
 
   const recentItems: FileItem[] = useMemo(
     () =>
