@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.65.0] - 2026-06-09
+
+
+### Added
 - Run agent sessions on the genuine Claude Code CLI using your Claude Pro/Max subscription (no API metering), with the same live transcript, file tracking, and interactive prompts as the built-in agents — plus a resizable raw-terminal drawer that auto-reveals when the CLI opens a native picker (`/model`, `/login`, …).
 - Import GitHub issues into the tracker as native bug, task, or feature items that link back to the source, with one-click re-snapshot to pull the latest title, status, and body. Uses your installed `gh` login.
 
@@ -24,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Synced tracker item bodies containing lists or links now load for teammates instead of appearing blank.
 - Voice mode connects again after OpenAI retired the Realtime Beta API (migrated desktop and iOS to the GA shape).
 - Renaming or moving a project no longer fails and rolls back on the SQLite backend.
+- Quick Open remembers your filter selections, and file-mask filters now return matching results.
 
 ### Removed
 <!-- Removed features go here -->
