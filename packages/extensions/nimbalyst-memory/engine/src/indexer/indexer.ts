@@ -8,7 +8,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import fg from 'fast-glob';
 import picomatch from 'picomatch';
-import type { Embedder, EngineConfig, SourceSet, StoredChunk } from '../types.js';
+import type { Embedder, EngineConfig, SourceSet, StoredChunk, VirtualRecord } from '../types.js';
 import { chunkMarkdown } from '../chunker.js';
 import { termFrequencies } from '../retrieval/bm25.js';
 import type { SqliteStore } from '../store/sqliteStore.js';
@@ -24,6 +24,15 @@ interface FileRef {
   /** POSIX path relative to root. */
   sourcePath: string;
   sourceClass: string;
+}
+
+/** A source chunked + dirty-checked but not yet embedded (see `prepareContent`). */
+interface PreparedSource {
+  sourcePath: string;
+  /** All chunks for the source; reusable ones already carry their dense vector. */
+  stored: StoredChunk[];
+  /** Chunks needing a (re)embed, as indices into `stored` plus the embed input. */
+  pending: { idx: number; input: string }[];
 }
 
 /** Embed input includes the heading breadcrumb for extra context. */
@@ -105,9 +114,11 @@ export class Indexer {
       indexed += await this.indexFile(f.sourcePath, f.sourceClass);
     }
 
-    // Drop files that no longer exist on disk.
+    // Drop files that no longer exist on disk. Only file-backed sources are
+    // considered — virtual records (trackers, sessions) are never pruned here,
+    // so a markdown re-index can't wipe the catalog.
     onProgress?.({ phase: 'prune', done: 0, total: 0 });
-    for (const sourcePath of this.store.sourcePaths()) {
+    for (const sourcePath of this.store.fileSourcePaths()) {
       if (!live.has(sourcePath)) this.store.deleteSource(sourcePath);
     }
 
@@ -126,13 +137,90 @@ export class Indexer {
       this.store.deleteSource(sourcePath);
       return 0;
     }
+    return this.indexContent(sourcePath, sourceClass, raw);
+  }
 
-    const chunks = chunkMarkdown(sourcePath, sourceClass, raw, this.config.chunk);
+  /**
+   * Index a virtual record set (trackers, sessions — anything that does NOT live
+   * on disk). Dirty-checks per record exactly like a file, but batches the embed
+   * call across ALL records so a large backfill is one (internally-paginated)
+   * embedder round-trip, not one per record. Returns the number of chunks
+   * (re)embedded.
+   */
+  async indexRecords(records: VirtualRecord[]): Promise<number> {
+    if (records.length === 0) return 0;
+
+    const prepared: PreparedSource[] = [];
+    const inputs: string[] = [];
+    const backref: { p: number; idx: number }[] = [];
+    for (const rec of records) {
+      const raw = rec.title ? `# ${rec.title}\n\n${rec.text}` : rec.text;
+      const p = this.prepareContent(rec.id, rec.sourceClass, raw, {
+        refType: rec.refType,
+        refId: rec.refId,
+      });
+      const pi = prepared.push(p) - 1;
+      for (const pend of p.pending) {
+        backref.push({ p: pi, idx: pend.idx });
+        inputs.push(pend.input);
+      }
+    }
+
+    if (inputs.length) {
+      const vectors = await this.embedder.embed(inputs);
+      backref.forEach((b, i) => {
+        prepared[b.p].stored[b.idx].denseEmbedding = vectors[i] ?? null;
+      });
+    }
+
+    let embedded = 0;
+    for (const p of prepared) {
+      this.store.upsertChunks(p.stored);
+      this.store.pruneSource(p.sourcePath, p.stored.map((c) => c.id));
+      embedded += p.pending.length;
+    }
+    return embedded;
+  }
+
+  /**
+   * Index raw markdown for one source path (file or virtual). Chunk → dirty-check
+   * → embed only changed chunks → upsert → prune the stale tail. Returns the
+   * number of chunks (re)embedded.
+   */
+  async indexContent(
+    sourcePath: string,
+    sourceClass: string,
+    raw: string,
+    ref?: { refType?: string; refId?: string }
+  ): Promise<number> {
+    const p = this.prepareContent(sourcePath, sourceClass, raw, ref);
+    if (p.pending.length) {
+      const vectors = await this.embedder.embed(p.pending.map((t) => t.input));
+      p.pending.forEach((t, i) => {
+        p.stored[t.idx].denseEmbedding = vectors[i] ?? null;
+      });
+    }
+    this.store.upsertChunks(p.stored);
+    this.store.pruneSource(sourcePath, p.stored.map((c) => c.id));
+    return p.pending.length;
+  }
+
+  /**
+   * Chunk + dirty-check one source without embedding. Reusable chunks keep their
+   * stored vector; changed/new ones are collected in `pending` for a batched
+   * embed by the caller.
+   */
+  private prepareContent(
+    sourcePath: string,
+    sourceClass: string,
+    raw: string,
+    ref?: { refType?: string; refId?: string }
+  ): PreparedSource {
+    const chunks = chunkMarkdown(sourcePath, sourceClass, raw, this.config.chunk, ref);
     const existing = new Map(this.store.chunksForSource(sourcePath).map((c) => [c.id, c]));
     const info = this.embedder.info;
 
-    // Decide which chunks need (re)embedding.
-    const toEmbed: { idx: number; input: string }[] = [];
+    const pending: { idx: number; input: string }[] = [];
     const stored: StoredChunk[] = chunks.map((c, idx) => {
       const prev = existing.get(c.id);
       const reusable =
@@ -142,7 +230,7 @@ export class Indexer {
         prev.model === info.model &&
         prev.dims === info.dims &&
         prev.denseEmbedding;
-      if (!reusable) toEmbed.push({ idx, input: embedInput(c.headingPath, c.text) });
+      if (!reusable) pending.push({ idx, input: embedInput(c.headingPath, c.text) });
       return {
         ...c,
         denseEmbedding: reusable ? prev!.denseEmbedding : null,
@@ -153,17 +241,7 @@ export class Indexer {
         updatedAt: Date.now(),
       };
     });
-
-    if (toEmbed.length) {
-      const vectors = await this.embedder.embed(toEmbed.map((t) => t.input));
-      toEmbed.forEach((t, i) => {
-        stored[t.idx].denseEmbedding = vectors[i] ?? null;
-      });
-    }
-
-    this.store.upsertChunks(stored);
-    this.store.pruneSource(sourcePath, stored.map((c) => c.id));
-    return toEmbed.length;
+    return { sourcePath, stored, pending };
   }
 
   /** Drop a source file from the index. */

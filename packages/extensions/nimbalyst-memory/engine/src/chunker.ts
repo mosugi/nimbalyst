@@ -132,8 +132,11 @@ export function chunkMarkdown(
   sourcePath: string,
   sourceClass: string,
   raw: string,
-  opts: ChunkOptions = {}
+  opts: ChunkOptions = {},
+  ref?: { refType?: string; refId?: string }
 ): Chunk[] {
+  const refType = ref?.refType ?? 'doc-file';
+  const refId = ref?.refId ?? sourcePath;
   const minTokens = opts.minTokens ?? DEFAULT_MIN_TOKENS;
   const maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS;
   const body = stripFrontmatter(raw);
@@ -171,5 +174,7 @@ export function chunkMarkdown(
     text: c.text,
     contentHash: sha256(c.text),
     ordinal,
+    refType,
+    refId,
   }));
 }

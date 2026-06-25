@@ -126,6 +126,36 @@ export function NimbalystMemorySettings({ theme, callBackendTool }: SettingsPane
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  // Quick Open: opt-in AI-session indexing (off by default). Persisted as an app
+  // setting and read by the host's SemanticCatalogService.
+  const [indexSessions, setIndexSessions] = useState(false);
+  const [togglingSessions, setTogglingSessions] = useState(false);
+
+  useEffect(() => {
+    const api = (window as { electronAPI?: { invoke?: (c: string, ...a: unknown[]) => Promise<unknown> } })
+      .electronAPI;
+    if (!api?.invoke) return;
+    void api
+      .invoke('semantic-search:get-index-sessions')
+      .then((v) => setIndexSessions(v === true))
+      .catch(() => {});
+  }, []);
+
+  const toggleIndexSessions = useCallback(async (next: boolean) => {
+    const api = (window as { electronAPI?: { invoke?: (c: string, ...a: unknown[]) => Promise<unknown> } })
+      .electronAPI;
+    if (!api?.invoke) return;
+    setTogglingSessions(true);
+    setIndexSessions(next); // optimistic
+    try {
+      await api.invoke('semantic-search:set-index-sessions', next);
+    } catch {
+      setIndexSessions(!next); // revert on failure
+    } finally {
+      setTogglingSessions(false);
+    }
+  }, []);
+
   const refreshStatus = useCallback(async () => {
     if (!callBackendTool) return;
     setLoadingStatus(true);
@@ -350,6 +380,35 @@ export function NimbalystMemorySettings({ theme, callBackendTool }: SettingsPane
           Live status is unavailable in this version of the host.
         </p>
       )}
+
+      {/* ---------------- QUICK OPEN ---------------- */}
+      <section style={SECTION}>
+        <h4 style={H4}>Global search</h4>
+        <p style={{ margin: 0, color: muted, lineHeight: 1.5 }}>
+          With this extension enabled, Quick Open gains a <strong>Search</strong>{' '}
+          tab that finds any tracker or document by meaning. Trackers are cataloged
+          automatically.
+        </p>
+        <label
+          style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', lineHeight: 1.45 }}
+        >
+          <input
+            type="checkbox"
+            checked={indexSessions}
+            disabled={togglingSessions}
+            onChange={(e) => void toggleIndexSessions(e.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            <span style={{ color: 'var(--nim-text)' }}>Also index AI sessions</span>
+            <span style={{ display: 'block', color: muted, fontSize: 12 }}>
+              Makes past sessions findable by their titles, prompts, and replies
+              (not the full transcript). Off by default. Toggling on indexes your
+              existing sessions in the background.
+            </span>
+          </span>
+        </label>
+      </section>
 
       {/* ---------------- 1. COVERAGE ---------------- */}
       <section style={SECTION}>

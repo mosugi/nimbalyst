@@ -10,7 +10,7 @@
  */
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type { Embedder, EngineConfig, Fact, SearchHit } from './types.js';
+import type { Embedder, EngineConfig, Fact, SearchHit, VirtualRecord } from './types.js';
 import { SqliteStore } from './store/sqliteStore.js';
 import { Indexer, type IndexProgress } from './indexer/indexer.js';
 import { IndexWatcher } from './indexer/watcher.js';
@@ -118,6 +118,34 @@ export class MemoryEngine {
     if (this.watcher) return;
     this.watcher = new IndexWatcher(this.config, this.indexer, () => this.refreshSnapshot());
     this.watcher.start();
+  }
+
+  // --- Virtual records (DB-resident content: trackers, sessions, …) ---------
+
+  /**
+   * Ingest records that don't live on disk. Chunks, embeds (only changed
+   * records, by content hash), and upserts them into the same hybrid index as
+   * files — so one `search()` spans markdown + trackers + sessions. Refreshes
+   * the retrieval snapshot so the new records are immediately searchable.
+   *
+   * Each record's `id` must be globally unique (the host namespaces it); it is
+   * the synthetic source path and the `removeRecords` key.
+   */
+  async ingestRecords(records: VirtualRecord[]): Promise<{ ingested: number }> {
+    const ingested = await this.indexer.indexRecords(records);
+    this.refreshSnapshot();
+    return { ingested };
+  }
+
+  /**
+   * Remove virtual records by their `id` (the same value passed as
+   * `VirtualRecord.id`). Idempotent — unknown ids are no-ops. Refreshes the
+   * retrieval snapshot.
+   */
+  removeRecords(ids: string[]): void {
+    if (ids.length === 0) return;
+    for (const id of ids) this.store.deleteSource(id);
+    this.refreshSnapshot();
   }
 
   // --- Retrieval -----------------------------------------------------------

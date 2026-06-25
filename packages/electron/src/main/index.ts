@@ -79,6 +79,8 @@ import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { getOpenCodeConfigService, registerOpenCodeConfigHandlers } from './ipc/OpenCodeConfigHandlers';
 import { registerClaudeCodePluginHandlers } from './ipc/ClaudeCodePluginHandlers';
 import { registerExportHandlers } from './ipc/ExportHandlers';
+import { registerSemanticSearchHandlers } from './ipc/SemanticSearchHandlers';
+import { SemanticCatalogService } from './services/SemanticCatalogService';
 import { registerShareHandlers } from './ipc/ShareHandlers';
 import { MCPConfigService } from './services/MCPConfigService';
 import { setMcpConfigServiceGetter } from './mcpConfigServiceRef';
@@ -1523,6 +1525,10 @@ app.whenReady().then(async () => {
     registerExportHandlers();
     registerShareHandlers();
     registerTrackerSyncHandlers();
+    registerSemanticSearchHandlers();
+    // Reactively catalog trackers into the memory engine (when enabled) and
+    // serve Quick Open semantic search.
+    SemanticCatalogService.getInstance().start();
     initTrackerSchemaService(); // Register IPC handlers + load built-in schemas
 
     // Initialize commit-tracker linking (listens to GitRefWatcher for all commits)

@@ -360,6 +360,7 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Session quick open (Cmd+L) — Shift+Tab searches message contents, not just titles
 - Prompt quick open (Cmd+Shift+L)
 - Content search (Cmd+Shift+F)
+- Global semantic search (Cmd+Shift+O) — a Quick Open "Search" tab that finds any tracker or document by meaning (hybrid semantic + keyword), powered by the Nimbalyst Memory extension; appears only when that extension is enabled. Optionally indexes AI sessions too (off by default)
 - Mouse back/forward button support
 - Breadcrumb navigation
 

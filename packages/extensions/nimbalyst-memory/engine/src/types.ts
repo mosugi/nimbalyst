@@ -21,6 +21,18 @@ export interface Chunk {
   contentHash: string;
   /** Per-file sequence number; combined with sourcePath forms `id`. */
   ordinal: number;
+  /**
+   * What kind of openable entity this chunk belongs to. `'doc-file'` for on-disk
+   * markdown; host-defined otherwise (e.g. `'tracker'`, `'session'`). The engine
+   * never interprets it — it just round-trips it onto hits so the caller can
+   * route the open action.
+   */
+  refType: string;
+  /**
+   * Opaque, openable identifier for the entity (e.g. a tracker id, a session id,
+   * or — for `'doc-file'` — the file's `sourcePath`).
+   */
+  refId: string;
 }
 
 /** A chunk as persisted, carrying its embedding + provenance. */
@@ -34,6 +46,31 @@ export interface StoredChunk extends Chunk {
   dims: number;
   /** Epoch millis of last write. */
   updatedAt: number;
+}
+
+/**
+ * A record to index that does NOT live on disk — a tracker item, an AI session,
+ * etc. The host assembles the text from the database; the engine chunks, embeds,
+ * and stores it exactly like a file. Kept host-agnostic: the engine never knows
+ * what a "tracker" is, only that it has text and an openable `refType`/`refId`.
+ *
+ * `id` MUST be globally unique across ALL records and file source paths — the
+ * host namespaces it (e.g. `tracker:<uuid>`). It doubles as the synthetic source
+ * path (so chunk ids are `${id}#${ordinal}`) and as the delete key for
+ * `removeRecords`.
+ */
+export interface VirtualRecord {
+  id: string;
+  /** Free-form coverage tag (e.g. `'trackers'`, `'sessions'`). */
+  sourceClass: string;
+  /** Openable-entity kind echoed onto hits (e.g. `'tracker'`, `'session'`). */
+  refType: string;
+  /** Openable identifier echoed onto hits (e.g. the tracker id). */
+  refId: string;
+  /** Optional title; indexed as the record's top heading for better retrieval. */
+  title?: string;
+  /** Body text to index (plain text or markdown). */
+  text: string;
 }
 
 /** Identity of the vectors in the store; switching any field forces re-index. */
@@ -96,6 +133,10 @@ export interface EngineConfig {
 export interface SearchHit {
   sourcePath: string;
   sourceClass: string;
+  /** Openable-entity kind for this hit (`'doc-file'` | `'tracker'` | `'session'` | …). */
+  refType: string;
+  /** Openable identifier (a file path, a tracker id, a session id). */
+  refId: string;
   headingPath: string[];
   text: string;
   /** Fused RRF score (higher is better). */

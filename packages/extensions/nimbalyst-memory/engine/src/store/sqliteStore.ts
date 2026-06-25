@@ -38,6 +38,8 @@ interface ChunkRow {
   model: string;
   dims: number;
   updated_at: number;
+  ref_type: string;
+  ref_id: string;
 }
 
 export class SqliteStore {
@@ -65,11 +67,33 @@ export class SqliteStore {
         embedder_id TEXT NOT NULL,
         model TEXT NOT NULL,
         dims INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        ref_type TEXT NOT NULL DEFAULT 'doc-file',
+        ref_id TEXT NOT NULL DEFAULT ''
       );
       CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_path);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
+    this.migrate();
+  }
+
+  /**
+   * Add columns introduced after a store may already exist on disk. The index is
+   * rebuildable, so a missing-column store could be wiped instead — but an
+   * in-place ALTER avoids a needless full re-embed on upgrade. Existing rows are
+   * all file-backed (the only source before virtual records), so they backfill
+   * to `ref_type='doc-file'` with `ref_id = source_path`.
+   */
+  private migrate(): void {
+    const cols = this.db.prepare(`PRAGMA table_info(chunks)`).all() as { name: string }[];
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has('ref_type')) {
+      this.db.exec(`ALTER TABLE chunks ADD COLUMN ref_type TEXT NOT NULL DEFAULT 'doc-file'`);
+    }
+    if (!names.has('ref_id')) {
+      this.db.exec(`ALTER TABLE chunks ADD COLUMN ref_id TEXT NOT NULL DEFAULT ''`);
+      this.db.exec(`UPDATE chunks SET ref_id = source_path WHERE ref_id = ''`);
+    }
   }
 
   // --- Embedder identity ---------------------------------------------------
@@ -116,14 +140,29 @@ export class SqliteStore {
     return rows.map((r) => r.source_path);
   }
 
+  /**
+   * Source paths backed by on-disk files only (`ref_type='doc-file'`). The file
+   * index pass prunes against THIS list, never against virtual records (trackers,
+   * sessions) — those are pruned solely via their own remove path, so a markdown
+   * re-index never wipes the catalog.
+   */
+  fileSourcePaths(): string[] {
+    const rows = this.db
+      .prepare(`SELECT DISTINCT source_path FROM chunks WHERE ref_type = 'doc-file'`)
+      .all() as { source_path: string }[];
+    return rows.map((r) => r.source_path);
+  }
+
   // --- Writes --------------------------------------------------------------
 
   private upsertStmt() {
     return this.db.prepare(`
       INSERT INTO chunks (id, source_path, source_class, heading_path, ordinal,
-        content, content_hash, dense_embedding, sparse_terms, embedder_id, model, dims, updated_at)
+        content, content_hash, dense_embedding, sparse_terms, embedder_id, model, dims, updated_at,
+        ref_type, ref_id)
       VALUES (@id, @source_path, @source_class, @heading_path, @ordinal,
-        @content, @content_hash, @dense_embedding, @sparse_terms, @embedder_id, @model, @dims, @updated_at)
+        @content, @content_hash, @dense_embedding, @sparse_terms, @embedder_id, @model, @dims, @updated_at,
+        @ref_type, @ref_id)
       ON CONFLICT(id) DO UPDATE SET
         source_path = excluded.source_path,
         source_class = excluded.source_class,
@@ -136,7 +175,9 @@ export class SqliteStore {
         embedder_id = excluded.embedder_id,
         model = excluded.model,
         dims = excluded.dims,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        ref_type = excluded.ref_type,
+        ref_id = excluded.ref_id
     `);
   }
 
@@ -158,6 +199,8 @@ export class SqliteStore {
           model: c.model,
           dims: c.dims,
           updated_at: c.updatedAt,
+          ref_type: c.refType,
+          ref_id: c.refId,
         });
       }
     });
@@ -198,6 +241,8 @@ export class SqliteStore {
       model: r.model,
       dims: r.dims,
       updatedAt: r.updated_at,
+      refType: r.ref_type,
+      refId: r.ref_id,
     };
   }
 

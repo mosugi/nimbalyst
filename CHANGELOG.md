@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Reference a tracker item from any document or AI chat: type `#` to pick an existing item and insert a live chip showing its current status and title (filter by type with `bug:`, search by key or title), with a one-click way to turn a legacy inline tracker into a real tracked item. The AI now links tracker items as clickable chips too.
 - New Nimbalyst Memory extension: indexes your project notes and surfaces relevant facts to the AI and voice agent for grounded answers.
+- Global semantic search in Quick Open (Cmd+Shift+O): find any tracker or document by meaning, with an option to include past AI sessions; available when the Nimbalyst Memory extension is enabled.
 - Extensions can now contribute tools and session context to the voice agent.
 - Search box on the Installed Extensions settings pane to filter the list.
 - Optional "Shared" column in the tracker table shows whether each item is shared with the team or local-only.

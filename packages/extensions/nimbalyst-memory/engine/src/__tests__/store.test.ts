@@ -30,6 +30,8 @@ function chunk(id: string, sourcePath: string, ordinal: number, text: string): S
     model: 'fake-bow',
     dims: 3,
     updatedAt: 1,
+    refType: 'doc-file',
+    refId: sourcePath,
   };
 }
 

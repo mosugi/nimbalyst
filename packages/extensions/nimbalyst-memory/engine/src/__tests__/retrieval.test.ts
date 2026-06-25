@@ -86,6 +86,8 @@ async function buildChunks(
     model: embedder.info.model,
     dims: embedder.info.dims,
     updatedAt: 1,
+    refType: 'doc-file',
+    refId: r.sourcePath,
   }));
 }
 
