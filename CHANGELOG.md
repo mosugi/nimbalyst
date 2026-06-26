@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New Nimbalyst Memory extension: indexes your project notes and surfaces relevant facts to the AI and voice agent for grounded answers.
 - Global semantic search in Quick Open (Cmd+Shift+O): find any tracker or document by meaning, with an option to include past AI sessions; available when the Nimbalyst Memory extension is enabled.
 - Extensions can now contribute tools and session context to the voice agent.
+- Ask the voice agent to open a past AI session by topic (e.g. "open the most recent session working on the collaborative document system"); it finds sessions by what they worked on, not just their title, when the Nimbalyst Memory extension is enabled.
 - Search box on the Installed Extensions settings pane to filter the list.
 - Optional "Shared" column in the tracker table shows whether each item is shared with the team or local-only.
 - Database Browser maintenance action to reclaim space used by old Claude Code sessions, with an optional compaction step.

@@ -126,4 +126,49 @@ describe('Retriever (hybrid + expand)', () => {
     const hits = r.search('unique_symbol_xyz', null, 2);
     expect(hits[0].sourcePath).toBe('a.md');
   });
+
+  it('restricts retrieval to the requested source class', async () => {
+    // Models the real bug: many doc/plan chunks match a topic and crowd the
+    // (capped) candidate pool, so a relevant session never surfaces in a global
+    // search. Scoping to ['sessions'] must return ONLY session entities.
+    const embedder = new FakeEmbedder();
+    const rows = [
+      { id: 'd1#0', sourceClass: 'docs', refType: 'doc-file', refId: 'd1.md', text: 'collaborative document realtime sync design' },
+      { id: 'd2#0', sourceClass: 'docs', refType: 'doc-file', refId: 'd2.md', text: 'collaborative document realtime sync notes' },
+      { id: 'p1#0', sourceClass: 'plans', refType: 'plan', refId: 'p1.md', text: 'collaborative document realtime sync plan' },
+      { id: 's1#0', sourceClass: 'sessions', refType: 'session', refId: 'sess-abc', text: 'worked on the collaborative document realtime sync feature' },
+    ];
+    const vectors = await embedder.embed(rows.map((r) => r.text));
+    const chunks: StoredChunk[] = rows.map((r, i) => ({
+      id: r.id,
+      sourcePath: r.refId,
+      sourceClass: r.sourceClass,
+      headingPath: [],
+      ordinal: 0,
+      text: r.text,
+      contentHash: `h-${r.id}`,
+      denseEmbedding: vectors[i],
+      sparseTerms: termFrequencies(r.text),
+      embedderId: embedder.info.id,
+      model: embedder.info.model,
+      dims: embedder.info.dims,
+      updatedAt: 1,
+      refType: r.refType,
+      refId: r.refId,
+    }));
+    const retriever = new Retriever(chunks);
+    const [qv] = await embedder.embed(['collaborative document system']);
+
+    // Unscoped: docs/plans are present (they dominate the pool).
+    const global = retriever.search('collaborative document system', qv, 10);
+    expect(global.some((h) => h.sourceClass === 'docs')).toBe(true);
+
+    // Scoped: only the session entity comes back.
+    const scoped = retriever.search('collaborative document system', qv, 10, {
+      sourceClasses: ['sessions'],
+    });
+    expect(scoped.length).toBeGreaterThan(0);
+    expect(scoped.every((h) => h.sourceClass === 'sessions')).toBe(true);
+    expect(scoped.map((h) => h.refId)).toContain('sess-abc');
+  });
 });

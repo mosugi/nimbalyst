@@ -26,9 +26,15 @@ export function registerSemanticSearchHandlers() {
       workspacePath: string,
       query: string,
       k?: number,
+      sourceClasses?: string[],
     ): Promise<SemanticSearchResult[]> => {
       if (!workspacePath || !query?.trim()) return [];
-      return SemanticCatalogService.getInstance().query(workspacePath, query, k ?? 20);
+      return SemanticCatalogService.getInstance().query(
+        workspacePath,
+        query,
+        k ?? 20,
+        Array.isArray(sourceClasses) && sourceClasses.length ? sourceClasses : undefined,
+      );
     },
   );
 

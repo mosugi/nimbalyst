@@ -150,7 +150,11 @@ export class MemoryEngine {
 
   // --- Retrieval -----------------------------------------------------------
 
-  async search(query: string, k = 5): Promise<SearchHit[]> {
+  async search(
+    query: string,
+    k = 5,
+    opts?: { sourceClasses?: string[] },
+  ): Promise<SearchHit[]> {
     let vec: number[] | null = null;
     try {
       const [embedded] = await this.embedder.embed([query]);
@@ -169,7 +173,7 @@ export class MemoryEngine {
       }
       this.lastEmbedError = msg;
     }
-    return this.retriever.search(query, vec, k);
+    return this.retriever.search(query, vec, k, opts);
   }
 
   expand(sourcePath: string, headingPath: string[]): { sourcePath: string; headingPath: string[]; text: string } | null {

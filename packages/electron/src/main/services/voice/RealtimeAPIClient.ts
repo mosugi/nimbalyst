@@ -792,13 +792,13 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
         {
           type: 'function',
           name: 'list_sessions',
-          description: 'List recent AI sessions in this workspace. Returns session IDs, titles, and running status. Use this when the user asks about their sessions, wants to find a session by name, or before navigating to one.',
+          description: 'List or find AI sessions in this workspace. Returns session IDs, titles, running status, and a "lastActive" time (e.g. "2 hours ago"). With no query it returns the most recent sessions. With a query it finds sessions by TOPIC, semantically matching what each session was actually working on (its prompts and the work done) -- not just the title -- so "the session working on the collaborative document system" resolves even when those words are not in the title. Use this before navigating to a session. When the user asks for "the most recent session working on X", pass X as the query and pick the result with the most recent "lastActive".',
           parameters: {
             type: 'object',
             properties: {
               query: {
                 type: 'string',
-                description: 'Optional search string to filter sessions by title.',
+                description: 'Optional topic to find sessions by. Describe what the session was about (e.g. "collaborative document system", "voice mode bugs"); content is matched semantically, not just titles.',
               },
             },
             required: [],

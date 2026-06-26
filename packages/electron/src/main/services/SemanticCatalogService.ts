@@ -165,7 +165,12 @@ export class SemanticCatalogService {
     );
   }
 
-  async query(workspacePath: string, query: string, k = 20): Promise<SemanticSearchResult[]> {
+  async query(
+    workspacePath: string,
+    query: string,
+    k = 20,
+    sourceClasses?: string[],
+  ): Promise<SemanticSearchResult[]> {
     if (!query.trim() || !this.isAvailable(workspacePath)) return [];
     try {
       const res = await getPrivilegedExtensionHost().request<{ results: SemanticSearchResult[] }>({
@@ -173,7 +178,7 @@ export class SemanticCatalogService {
         moduleId: MODULE_ID,
         workspacePath,
         method: 'globalSearch',
-        params: { query, k },
+        params: { query, k, ...(sourceClasses?.length ? { sourceClasses } : {}) },
         requiredPermission: null,
       });
       return res?.results ?? [];
