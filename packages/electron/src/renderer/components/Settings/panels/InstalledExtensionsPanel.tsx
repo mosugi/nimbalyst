@@ -150,7 +150,7 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
               : 'local';
         return {
           ...ext,
-          enabled: extSettings?.enabled ?? true,
+          enabled: extSettings?.enabled ?? (ext.manifest.defaultEnabled !== false),
           claudePluginEnabled: extSettings?.claudePluginEnabled ?? claudePlugin?.enabledByDefault ?? true,
           agentWorkflowsEnabled: extSettings?.agentWorkflowsEnabled ?? agentWorkflows?.enabledByDefault ?? true,
           source,
@@ -174,7 +174,7 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
     }
   };
 
-  const handleToggle = useCallback(async (extensionId: string, enabled: boolean) => {
+  const handleToggle = useCallback(async (extensionId: string, enabled: boolean, extensionPath?: string) => {
     setProcessingId(extensionId);
     setError(null);
 
@@ -185,7 +185,17 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
       // Update runtime state in ExtensionLoader
       const loader = getExtensionLoader();
       if (enabled) {
-        loader.enableExtension(extensionId);
+        // enableExtension only flips a flag on an already-loaded extension.
+        // If it was skipped at startup (e.g. defaultEnabled: false), it isn't
+        // loaded yet, so load it from disk now to register its panels/editors.
+        if (loader.getExtension(extensionId) || !extensionPath) {
+          loader.enableExtension(extensionId);
+        } else {
+          const result = await loader.loadExtensionFromPath(extensionPath);
+          if (!result.success) {
+            throw new Error(result.error || `Failed to load extension ${extensionId}`);
+          }
+        }
       } else {
         loader.disableExtension(extensionId);
       }
@@ -457,7 +467,7 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
                   <span className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                     <ToggleSwitch
                       checked={ext.enabled}
-                      onChange={(checked) => handleToggle(ext.id, checked)}
+                      onChange={(checked) => handleToggle(ext.id, checked, ext.path)}
                       disabled={processingId === ext.id}
                     />
                   </span>
