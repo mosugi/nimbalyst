@@ -407,6 +407,13 @@ The voice agent's spoken language is pinned to the desktop's **preferred agent l
 
 On iOS the setting arrives via settings sync: `preferredAgentLanguage` is a top-level field on `SyncedSettings`, persisted into `VoiceModeSettings.language` (UserDefaults) when the desktop pushes settings. Because the directive lives in `updateSession()`, it is re-sent identically on reconnect, like voice/model/reasoning.
 
+## Mobile (iOS) Voice Agent
+
+The iOS app runs its own on-device voice agent (`packages/ios/.../Voice/VoiceAgent.swift` + the floating `VoiceOverlay`), reusing the same tool surface. Two mobile-specific behaviors:
+
+- **Create-session navigation.** `create_session` is fire-and-forget to the desktop over the index sync channel; the desktop replies with a `createSessionResponseBroadcast` carrying the `requestId` + new `sessionId`. `VoiceAgent` remembers the `requestId` it sent and `consumePendingCreateSession(requestId:)` matches the response, so **only the device that asked** navigates. `AppState.navigateWhenSessionAvailable` waits for the session row to arrive via index sync, then sets `voiceNavigationRequest`, which the iPhone stack and iPad split view observe to open the session.
+- **Tool-call indicator.** `VoiceAgent.currentToolCall` is set when `RealtimeClient.onFunctionCall` fires and cleared by the new `onFunctionResultSent(callId)` hook (so async tools stay lit until they finish). While set, `VoiceOverlay` pulses the outer ring (amber) and shows a per-tool SF Symbol badge in the mic's corner.
+
 ## Analytics Events
 
 | Event | Trigger |

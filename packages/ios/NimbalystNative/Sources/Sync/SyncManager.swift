@@ -47,6 +47,12 @@ public final class SyncManager: ObservableObject {
     /// Called when settings are synced from the desktop (e.g., OpenAI API key, voice mode config).
     public var onSettingsSynced: ((SyncedSettings) -> Void)?
 
+    /// Called when the desktop confirms a create-session request succeeded.
+    /// Parameters: (requestId, sessionId). The `requestId` lets the caller match
+    /// the response to a request it originated (this broadcast reaches every
+    /// paired device), so only the requesting device navigates to the new session.
+    public var onSessionCreated: ((String, String) -> Void)?
+
     /// Called with diagnostic info when session message sync completes (success or failure).
     /// Parameters: (sessionId, diagnostic).
     ///
@@ -788,11 +794,14 @@ public final class SyncManager: ObservableObject {
             return
         }
         if broadcast.response.success {
-            logger.info("Session created: \(broadcast.response.sessionId ?? "unknown")")
+            let sessionId = broadcast.response.sessionId ?? "unknown"
+            logger.info("Session created: \(sessionId)")
+            if let sessionId = broadcast.response.sessionId {
+                onSessionCreated?(broadcast.response.requestId, sessionId)
+            }
         } else {
             logger.error("Session creation failed: \(broadcast.response.error ?? "unknown error")")
         }
-        // TODO: Notify UI of create session result
     }
 
     // MARK: - Voice Tool Proxy (mobile -> desktop)
@@ -1703,6 +1712,10 @@ public final class SyncManager: ObservableObject {
     }
 
     /// Request the desktop to create a new session in a project.
+    /// Returns the generated `requestId` so the caller can correlate the
+    /// asynchronous `createSessionResponseBroadcast` back to this request (e.g.
+    /// to navigate only the device that asked for the new session).
+    @discardableResult
     public func createSession(
         projectId: String,
         initialPrompt: String? = nil,
@@ -1711,7 +1724,7 @@ public final class SyncManager: ObservableObject {
         provider: String? = nil,
         model: String? = nil,
         agentRole: String? = nil
-    ) throws {
+    ) throws -> String {
         let encryptedProjectId = try crypto.encryptProjectId(projectId)
 
         var encryptedPrompt: String?
@@ -1722,9 +1735,10 @@ public final class SyncManager: ObservableObject {
             promptIv = result.iv
         }
 
+        let requestId = UUID().uuidString
         let request = CreateSessionRequestMessage(
             request: EncryptedCreateSessionRequest(
-                requestId: UUID().uuidString,
+                requestId: requestId,
                 encryptedProjectId: encryptedProjectId,
                 projectIdIv: CryptoManager.projectIdIvBase64,
                 encryptedInitialPrompt: encryptedPrompt,
@@ -1742,6 +1756,7 @@ public final class SyncManager: ObservableObject {
            let json = String(data: data, encoding: .utf8) {
             indexClient.sendRaw(json)
         }
+        return requestId
     }
 
     /// Request the desktop to create a new git worktree.

@@ -208,7 +208,9 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Context usage display
 - Queued prompt management
 - Hierarchical session navigation (workstream/worktree aware)
-- Mobile voice mode
+- Mobile voice mode (soft chime + haptic cue when the session connects and it's your turn to talk)
+- Mobile voice: asking the voice agent to start a new session opens it automatically on the device that asked
+- Mobile voice: the floating mic shows a tool-call indicator (animated ring + tool-icon badge) while the agent runs a tool
 
 ## Collaboration
 

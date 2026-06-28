@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Start a new coding session by voice — say "create a new session" on desktop or mobile.
+- Start a new coding session by voice — say "create a new session" on desktop or mobile; on mobile it now opens the new session automatically on the device you asked from.
+- The mobile floating mic shows what the voice agent is doing — an animated ring and a tool icon appear while it runs a tool.
 - Voice mode on mobile can now find sessions by topic, switch sessions, summarize a session (including the agent's latest notes and any question it's waiting on), answer a session's pending question by voice, and send coding tasks to your desktop.
 - Choose the voice model and reasoning level in Voice Mode settings.
 

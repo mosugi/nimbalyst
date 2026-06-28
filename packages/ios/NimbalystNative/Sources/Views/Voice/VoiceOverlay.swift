@@ -47,6 +47,7 @@ struct VoiceOverlay: View {
         .animation(.spring(response: 0.3), value: voiceAgent.pendingPrompt != nil)
         .animation(.spring(response: 0.3), value: showAuxControls)
         .animation(.easeInOut(duration: 0.2), value: voiceAgent.state)
+        .animation(.spring(response: 0.3), value: voiceAgent.currentToolCall)
     }
 
     // MARK: - Auxiliary controls (Pause / Resume + Cancel)
@@ -148,9 +149,22 @@ struct VoiceOverlay: View {
                 .contentShape(Circle())
             }
             .buttonStyle(PressScaleButtonStyle())
+
+            // Tool-call badge: a tool the voice agent is executing right now.
+            if let tool = voiceAgent.currentToolCall {
+                Image(systemName: toolIcon(for: tool.name))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(NimbalystColors.backgroundSecondary)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(NimbalystColors.warning))
+                    .overlay(Circle().stroke(NimbalystColors.background, lineWidth: 2))
+                    .offset(x: buttonSize / 2 - 6, y: -buttonSize / 2 + 6)
+                    .transition(.scale.combined(with: .opacity))
+            }
         }
         .onAppear { startAnimations() }
         .onChange(of: voiceAgent.state) { _ in startAnimations() }
+        .onChange(of: voiceAgent.currentToolCall) { _ in startAnimations() }
     }
 
     // MARK: - Button Content
@@ -211,6 +225,8 @@ struct VoiceOverlay: View {
     }
 
     private var ringColor: Color {
+        // A running tool call takes visual priority — amber ring to match the badge.
+        if isToolCallActive { return NimbalystColors.warning }
         switch voiceAgent.state {
         case .listening: return NimbalystColors.primary
         case .speaking: return NimbalystColors.success
@@ -219,7 +235,30 @@ struct VoiceOverlay: View {
     }
 
     private var shouldShowRing: Bool {
-        voiceAgent.state == .listening || voiceAgent.state == .speaking
+        isToolCallActive
+            || voiceAgent.state == .listening
+            || voiceAgent.state == .speaking
+    }
+
+    /// Whether the voice agent is currently executing a tool/function call.
+    private var isToolCallActive: Bool {
+        voiceAgent.currentToolCall != nil
+    }
+
+    /// SF Symbol for the in-flight tool, shown in the corner badge.
+    private func toolIcon(for name: String) -> String {
+        switch name {
+        case "create_session": return "plus.bubble.fill"
+        case "list_sessions": return "list.bullet"
+        case "switch_session": return "arrow.left.arrow.right"
+        case "get_session_summary": return "doc.text.magnifyingglass"
+        case "submit_agent_prompt", "submit_prompt", "ask_coding_agent": return "wand.and.stars"
+        case "answer_prompt": return "bubble.left.and.bubble.right.fill"
+        case "search_project_knowledge", "recall": return "brain"
+        case "remember": return "brain.head.profile"
+        case "stop_voice_session": return "stop.fill"
+        default: return "gearshape.fill"
+        }
     }
 
     // MARK: - Actions
@@ -262,6 +301,19 @@ struct VoiceOverlay: View {
     }
 
     private func startAnimations() {
+        // A tool call happens during `.processing`; pulse the ring (amber) and
+        // keep the thinking dots moving underneath the corner badge.
+        if isToolCallActive {
+            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                pulseScale = 1.18
+                ringOpacity = 0.85
+            }
+            withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
+                dotOffset = 1.0
+            }
+            return
+        }
+
         switch voiceAgent.state {
         case .listening:
             withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
