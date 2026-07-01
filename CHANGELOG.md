@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Nimbalyst-branded Android launcher icon, replacing the generic Android stock icon.
 - Claude Sonnet 5 is now selectable across the Claude chat, Claude Agent, and Claude Code CLI providers (Sonnet 4.6 remains available as a pinned choice).
 - Start a new coding session by voice — say "create a new session" on desktop or mobile; on mobile it now opens the new session automatically on the device you asked from.
 - The mobile floating mic shows what the voice agent is doing — an animated ring and a tool icon appear while it runs a tool.
