@@ -13,11 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 <!-- Changes to existing functionality go here -->
-- Built-in extensions no longer show the native-code warning dialog on first use; the consent prompt now only appears for third-party extensions.
 
 ### Fixed
 <!-- Bug fixes go here -->
-- Fixed agent calls to background tools (Monitor and other deferred tools) failing with schema validation errors, and made a user-configured ENABLE_TOOL_SEARCH setting actually take effect.
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.66.9] - 2026-07-02
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+- Built-in extensions no longer show the native-code consent prompt; it now only appears for third-party extensions.
+
+### Fixed
+<!-- Bug fixes go here -->
+- Agent calls to deferred background tools (Monitor et al) no longer fail with schema validation errors.
 
 ### Removed
 <!-- Removed features go here -->
