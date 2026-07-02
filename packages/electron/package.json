@@ -335,7 +335,8 @@
           "**/manifest.json",
           "**/package.json",
           "**/dist/**",
-          "**/claude-plugin/**"
+          "**/claude-plugin/**",
+          "!**/node_modules/**"
         ]
       },
       {
