@@ -13,9 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- The iOS voice agent now runs the same gpt-realtime-2 model and session configuration as desktop, with automatic fallback when the model is unavailable.
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Voice mode no longer interrupts itself from echo of its own speech on open speakers (desktop and iOS).
+- The voice selected in iOS Settings (or synced from desktop) is now actually used by the voice agent.
 
 ### Removed
 <!-- Removed features go here -->
