@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Shared folders are now first-class: right-click a folder in Shared Items to rename, move, copy a link, or delete it (with a count-based confirmation), drag folders and documents to reorganize, and let an AI agent create or reorganize shared files and folders — reorganizing never breaks a document's local link.
 - Advanced setting to route Claude Code CLI (Subscription) traffic through a custom local API proxy (e.g. a token-compression or caching layer).
 - Shared Docs discovery home: search, favorites, recently opened, and docs new or changed since you last viewed them, with a sidebar filter (All / Favorites / Updated) and controls to hide or clear unread markers.
 - Tools & Token Cost settings panel: see every tool group's estimated context-token cost and load policy in one place, with a link from the AI panel's token meter.
