@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Claude Code no longer breaks after an app update on Windows, and a broken install now shows an honest "repair Nimbalyst" message instead of a misleading libc error.
 
 ### Removed
 <!-- Removed features go here -->
