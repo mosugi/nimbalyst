@@ -62,9 +62,14 @@ export function TrackerReferencePicker({
       shift({ padding: 8 }),
       size({
         padding: 8,
-        apply({ rects, elements, availableHeight }) {
+        apply({ rects, elements, availableHeight, availableWidth }) {
+          const width = Math.max(
+            rects.reference.width,
+            Math.min(420, Math.max(280, availableWidth)),
+          );
           Object.assign(elements.floating.style, {
-            minWidth: `${Math.max(260, rects.reference.width)}px`,
+            width: `${width}px`,
+            maxWidth: 'calc(100vw - 16px)',
             maxHeight: `${Math.max(160, Math.min(360, availableHeight))}px`,
           });
         },
@@ -205,10 +210,11 @@ export function TrackerReferencePicker({
                     onClick={() => selectReference(option.referenceKey)}
                     className="tracker-reference-picker-option"
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'auto 1fr',
-                      gap: '2px 8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '3px',
                       width: '100%',
+                      minWidth: 0,
                       padding: '7px 8px',
                       border: 0,
                       borderRadius: '5px',
@@ -218,9 +224,31 @@ export function TrackerReferencePicker({
                       cursor: 'pointer',
                     }}
                   >
-                    <strong style={{ gridRow: '1 / span 2', fontSize: '11px' }}>{label}</strong>
-                    <span>{option.title || label}</span>
-                    <span style={{ color: 'var(--nim-text-faint)', fontSize: '10px' }}>{meta}</span>
+                    <span
+                      className="tracker-reference-picker-option-title"
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontSize: '12px',
+                        fontWeight: 550,
+                      }}
+                    >
+                      {option.title || label}
+                    </span>
+                    <span
+                      className="tracker-reference-picker-option-meta"
+                      title={[label, meta].filter(Boolean).join(' · ')}
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: 'var(--nim-text-faint)',
+                        fontSize: '10px',
+                      }}
+                    >
+                      {[label, meta].filter(Boolean).join(' · ')}
+                    </span>
                   </button>
                 );
               }) : (

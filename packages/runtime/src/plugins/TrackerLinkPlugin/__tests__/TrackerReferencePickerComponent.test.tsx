@@ -48,7 +48,7 @@ describe('TrackerReferencePicker', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Search tracker items' }), {
       target: { value: 'picker' },
     });
-    fireEvent.click(screen.getByRole('option', { name: /NIM-10.*Add tracker picker/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Add tracker picker.*NIM-10/ }));
 
     const selected = container.querySelector('.tracker-reference-picker-values');
     expect(selected).not.toBeNull();
@@ -93,10 +93,38 @@ describe('TrackerReferencePicker', () => {
     );
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Link tracker item' }));
-    fireEvent.click(screen.getByRole('option', { name: /NIM-10.*First item/ }));
+    fireEvent.click(screen.getByRole('option', { name: /First item.*NIM-10/ }));
 
     expect(screen.getByText('NIM-10')).toBeTruthy();
     expect(screen.queryByText('NIM-OLD')).toBeNull();
     expect(screen.queryByRole('textbox', { name: 'Search tracker items' })).toBeNull();
+  });
+
+  it('keeps long file-backed keys on a truncated metadata line', () => {
+    const store = createStore();
+    store.set(trackerItemsMapAtom, new Map([
+      ['fm:plan:design/Collaboration/collaborative-extension-editors.md', {
+        ...record(
+          'fm:plan:design/Collaboration/collaborative-extension-editors.md',
+          'fm:plan:design/Collaboration/collaborative-extension-editors.md',
+          'Collaborative Extension Editors',
+        ),
+      }],
+    ]));
+
+    render(
+      <Provider store={store}>
+        <ControlledPicker />
+      </Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Link tracker item' }));
+    const option = screen.getByRole('option', { name: /Collaborative Extension Editors/ });
+    expect(option.style.display).toBe('flex');
+    expect(option.querySelector('.tracker-reference-picker-option-title')?.textContent)
+      .toBe('Collaborative Extension Editors');
+    const metadata = option.querySelector<HTMLElement>('.tracker-reference-picker-option-meta');
+    expect(metadata?.textContent).toContain('fm:plan:design/Collaboration');
+    expect(metadata?.style.textOverflow).toBe('ellipsis');
   });
 });
