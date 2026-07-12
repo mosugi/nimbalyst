@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mobile session sync now skips messages the mobile transcript never displays, cutting sync storage and traffic.
 
 ### Fixed
+- Commit proposals now remain bound to their native worktree and cannot include files from another checkout.
 - Importing Mermaid diagrams into Excalidraw works again: flowcharts (including subgraphs) become editable shapes instead of failing or degrading to a broken image, and AI-added arrows no longer lose their labels.
 - Voice mode no longer stops listening while you are still speaking; the mic stays open until you finish or explicitly pause.
 - Shared-document comments now live in the text-selection toolbar instead of overlapping it.

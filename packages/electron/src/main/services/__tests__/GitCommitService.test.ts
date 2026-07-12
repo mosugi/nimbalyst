@@ -1,6 +1,5 @@
 import { execFile } from 'child_process';
 import * as fs from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -12,9 +11,12 @@ import {
 const execFileAsync = promisify(execFile);
 
 let tmpRoot: string;
+const testTempRoot = process.env.NIMBALYST_TEST_TEMP_DIR
+  ?? path.join(process.cwd(), 'nimbalyst-local', 'test-tmp');
 
 beforeEach(async () => {
-  tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'nim-git-commit-service-'));
+  await fs.mkdir(testTempRoot, { recursive: true });
+  tmpRoot = await fs.mkdtemp(path.join(testTempRoot, 'nim-git-commit-service-'));
 });
 
 afterEach(async () => {
@@ -25,7 +27,112 @@ async function git(args: string[], cwd: string): Promise<void> {
   await execFileAsync('git', args, { cwd });
 }
 
+async function gitOutput(args: string[], cwd: string): Promise<string> {
+  const { stdout } = await execFileAsync('git', args, { cwd });
+  return stdout;
+}
+
 describe('GitCommitService', () => {
+  it('rejects an empty proposal without committing the current index', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+    await fs.writeFile(path.join(tmpRoot, 'already-staged.txt'), 'keep\n', 'utf8');
+    await git(['add', 'already-staged.txt'], tmpRoot);
+
+    const result = await executeGitCommit(tmpRoot, 'must not commit an empty selection', []);
+
+    expect(result.success).toBe(false);
+    expect(await gitOutput(['diff', '--cached', '--name-only'], tmpRoot)).toBe('already-staged.txt\n');
+  });
+
+  it('commits a selected absolute file path relative to its repository', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+
+    const absoluteFilePath = path.join(tmpRoot, 'a.txt');
+    await fs.writeFile(absoluteFilePath, 'hello\n', 'utf8');
+
+    const result = await executeGitCommit(tmpRoot, 'commit absolute path', [absoluteFilePath]);
+
+    expect(result.success).toBe(true);
+    expect(result.commitHash).toBeTruthy();
+  });
+
+  it('commits an absolute path in the selected linked worktree, not its parent checkout', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+    await fs.writeFile(path.join(tmpRoot, 'seed.txt'), 'seed\n', 'utf8');
+    await git(['add', 'seed.txt'], tmpRoot);
+    await git(['commit', '-q', '-m', 'seed'], tmpRoot);
+
+    const worktreePath = path.join(tmpRoot, 'linked-worktree');
+    await git(['worktree', 'add', '-b', 'feature/worktree-commit', worktreePath], tmpRoot);
+    try {
+      const filePath = path.join(worktreePath, 'worktree-only.txt');
+      await fs.writeFile(filePath, 'worktree\n', 'utf8');
+
+      const result = await executeGitCommit(worktreePath, 'commit in linked worktree', [filePath]);
+
+      expect(result.success).toBe(true);
+      expect(await gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath)).toBe('feature/worktree-commit\n');
+      expect(await gitOutput(['log', '-1', '--format=%s'], tmpRoot)).toBe('seed\n');
+    } finally {
+      await git(['worktree', 'remove', '--force', worktreePath], tmpRoot);
+    }
+  });
+
+  it('rejects a selected path outside the repository', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+
+    const outsidePath = path.join(path.dirname(tmpRoot), 'outside.txt');
+    await fs.writeFile(outsidePath, 'outside\n', 'utf8');
+
+    try {
+      const result = await executeGitCommit(tmpRoot, 'must not commit outside path', [outsidePath]);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('outside the session workspace');
+    } finally {
+      await fs.rm(outsidePath, { force: true });
+    }
+  });
+
+  it('preserves existing staging when rejecting an outside path', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+
+    await fs.writeFile(path.join(tmpRoot, 'already-staged.txt'), 'keep\n', 'utf8');
+    await git(['add', 'already-staged.txt'], tmpRoot);
+    const outsidePath = path.join(path.dirname(tmpRoot), 'outside.txt');
+    await fs.writeFile(outsidePath, 'outside\n', 'utf8');
+
+    try {
+      const result = await executeGitCommit(tmpRoot, 'must not change the index', [outsidePath]);
+
+      expect(result.success).toBe(false);
+      expect(await gitOutput(['diff', '--cached', '--name-only'], tmpRoot)).toBe('already-staged.txt\n');
+    } finally {
+      await fs.rm(outsidePath, { force: true });
+    }
+  });
+
+  it('rejects Git pathspec magic in a proposal', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+
+    const result = await executeGitCommit(tmpRoot, 'must not expand a pathspec', [':(glob)**/*']);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('literal path');
+  });
+
   it('returns a failure result with hook output when pre-commit rejects the commit', async () => {
     await git(['init', '-q'], tmpRoot);
     await git(['config', 'user.email', 'test@example.com'], tmpRoot);
@@ -51,6 +158,26 @@ describe('GitCommitService', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('PRECOMMIT_STDOUT');
     expect(result.error).toContain('HOOK_DETAIL: lint failed');
+  });
+
+  it('restores the exact existing index when a hook rejects the proposed commit', async () => {
+    await git(['init', '-q'], tmpRoot);
+    await git(['config', 'user.email', 'test@example.com'], tmpRoot);
+    await git(['config', 'user.name', 'Test User'], tmpRoot);
+
+    await fs.writeFile(path.join(tmpRoot, 'already-staged.txt'), 'keep\n', 'utf8');
+    await git(['add', 'already-staged.txt'], tmpRoot);
+    const before = await gitOutput(['diff', '--cached', '--binary'], tmpRoot);
+
+    const hooksDir = path.join(tmpRoot, '.git', 'hooks');
+    await fs.mkdir(hooksDir, { recursive: true });
+    await fs.writeFile(path.join(hooksDir, 'pre-commit'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    await fs.writeFile(path.join(tmpRoot, 'proposed.txt'), 'proposal\n', 'utf8');
+
+    const result = await executeGitCommit(tmpRoot, 'hook must reject', ['proposed.txt']);
+
+    expect(result.success).toBe(false);
+    expect(await gitOutput(['diff', '--cached', '--binary'], tmpRoot)).toBe(before);
   });
 
   it('runs hooks with the injected subprocess env so PATH-dependent hooks resolve', async () => {
