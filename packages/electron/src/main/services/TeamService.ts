@@ -19,7 +19,7 @@
  * - REST calls with JWT auth to collabv3
  */
 
-import { net } from 'electron';
+import { BrowserWindow, net } from 'electron';
 import { createHash } from 'crypto';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
@@ -29,8 +29,8 @@ import { getCollabSyncHttpUrl } from '../utils/collabSyncUrl';
 import { assertJwtMatchesOrg, getJwtExp, AuthContextMismatchError } from './jwtOrg';
 import {
   getAccounts,
-  getSessionJwt,
-  getSessionJwtForAccount,
+  getPersonalSessionJwt,
+  getPersonalSessionJwtForAccount,
   getSessionToken,
   getSessionTokenForAccount,
   isAuthenticated,
@@ -43,6 +43,7 @@ import {
   getPersonalOrgId,
   getPersonalUserId,
 } from './StytchAuthService';
+import { asPersonalJwt, asTeamJwt, type PersonalJwt, type TeamJwt } from '@nimbalyst/runtime';
 import { getDatabase } from '../database/initialize';
 import {
   backfillProjection,
@@ -61,7 +62,6 @@ import { canAccess, type CanAccessInput, type AccessDatabase } from './OrgAccess
 import {
   getOrCreateIdentityKeyPair,
   uploadIdentityKeyToOrg,
-  generateAndStoreOrgKey,
   wrapOrgKeyForMember,
   uploadEnvelope,
   exportPublicKeyJwk,
@@ -78,13 +78,20 @@ import {
   markMemberVerified,
   fingerprintIdentityKey,
   fetchTeamKeyStatus,
+  setTeamKeyCustodyMode,
 } from './OrgKeyService';
 import { performKeyRotation, cleanupOrphanedDocuments, reEncryptTrackerFromLocal } from './KeyRotationService';
 // TrackerSyncManager already imports from this module (findTeamForWorkspace).
 // The cycle is safe because both sides only reference the imported symbols
 // inside function bodies, never at module-init time -- by the time
 // autoMatchTeamForWorkspace runs, both modules are fully loaded.
-import { ensureTrackerSyncForWorkspace } from './TrackerSyncManager';
+import { ensureTrackerSyncForWorkspace, migrateTeamToServerManaged } from './TrackerSyncManager';
+import { getCollabBackupService } from './CollabBackupService';
+import {
+  getSilentMigrationState,
+  initializeServerManagedOrganization,
+  runSilentTeamEncryptionMigrations,
+} from './SilentTeamEncryptionMigration';
 
 // ============================================================================
 // Server URL Helper
@@ -100,7 +107,7 @@ const getCollabServerUrl = getCollabSyncHttpUrl;
 // Types
 // ============================================================================
 
-interface TeamDetails {
+export interface TeamDetails {
   orgId: string;
   name: string;
   gitRemoteHash: string | null;
@@ -123,6 +130,9 @@ interface TeamDetails {
    * absent for snapshots from worker versions predating the registry.
    */
   projects?: TeamProjectSummary[];
+  /** Personal account whose JWT discovered this membership. Public metadata only. */
+  sourcePersonalOrgId?: string;
+  sourceEmail?: string | null;
 }
 
 /**
@@ -195,7 +205,7 @@ interface TeamMember {
 // ============================================================================
 
 interface CachedOrgJwt {
-  jwt: string;
+  jwt: TeamJwt;
   expiresAt: number;
 }
 
@@ -224,7 +234,7 @@ export async function getOrgScopedJwt(
   orgId: string,
   accountOrgId?: string,
   forceRefresh = false,
-): Promise<string> {
+): Promise<TeamJwt> {
   // Check cache
   const cached = orgJwtCache.get(orgId);
   if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
@@ -245,13 +255,13 @@ export async function getOrgScopedJwt(
 
   // Use the correct account's JWT to authenticate the exchange request
   const personalJwt = accountOrgId
-    ? getSessionJwtForAccount(accountOrgId)
-    : getSessionJwt();
+    ? getPersonalSessionJwtForAccount(accountOrgId)
+    : getPersonalSessionJwt();
   if (!personalJwt) {
     throw new Error('Not authenticated. Sign in first.');
   }
 
-  const doExchange = async (jwt: string, token: string) =>
+  const doExchange = async (jwt: PersonalJwt, token: string) =>
     net.fetch(`${httpUrl}/api/teams/${orgId}/switch`, {
       method: 'POST',
       headers: {
@@ -281,8 +291,8 @@ export async function getOrgScopedJwt(
     }
     if (refreshed) {
       const freshJwt = accountOrgId
-        ? getSessionJwtForAccount(accountOrgId)
-        : getSessionJwt();
+        ? getPersonalSessionJwtForAccount(accountOrgId)
+        : getPersonalSessionJwt();
       const freshToken = accountOrgId
         ? getSessionTokenForAccount(accountOrgId)
         : getSessionToken();
@@ -340,13 +350,14 @@ export async function getOrgScopedJwt(
 
   // Cache the org-scoped JWT (do NOT update global auth state -- the global
   // session JWT stays personal-org-scoped, only the token is shared)
+  const teamJwt = asTeamJwt(data.sessionJwt);
   orgJwtCache.set(orgId, {
-    jwt: data.sessionJwt,
+    jwt: teamJwt,
     expiresAt,
   });
 
   // logger.main.info('[TeamService] Obtained org-scoped JWT for:', orgId, 'expires in', Math.round((expiresAt - Date.now()) / 1000), 's');
-  return data.sessionJwt;
+  return teamJwt;
 }
 
 // ============================================================================
@@ -418,8 +429,8 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
   let jwt = orgId
     ? await getOrgScopedJwt(orgId)
     : accountOrgId
-      ? getSessionJwtForAccount(accountOrgId)
-      : getSessionJwt();
+      ? getPersonalSessionJwtForAccount(accountOrgId)
+      : getPersonalSessionJwt();
   if (!jwt) {
     logger.main.warn(`[TeamService] No JWT available (source: ${jwtSource})`);
     throw new Error('Not authenticated. Sign in first.');
@@ -435,7 +446,7 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
       const freshJwt = await refreshSessionForAccount(accountOrgId);
       if (freshJwt) {
         logger.main.info(`[TeamService] Secondary account ${accountOrgId} refreshed, retrying request...`);
-        response = await makeRequest(freshJwt);
+        response = await makeRequest(asPersonalJwt(freshJwt));
       } else {
         logger.main.warn(`[TeamService] Secondary account ${accountOrgId} refresh failed`);
       }
@@ -448,12 +459,12 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
         // Network error -- can't retry
       }
       if (refreshed) {
-        const freshJwt = getSessionJwt();
+        const freshJwt = getPersonalSessionJwt();
         if (freshJwt) {
           logger.main.info('[TeamService] Session refreshed, retrying request...');
           response = await makeRequest(freshJwt);
         } else {
-          logger.main.warn('[TeamService] Session refreshed but getSessionJwt() returned null');
+          logger.main.warn('[TeamService] Session refreshed but getPersonalSessionJwt() returned null');
         }
       } else {
         logger.main.warn('[TeamService] Session refresh failed, cannot retry');
@@ -554,7 +565,11 @@ async function listTeams(): Promise<TeamDetails[]> {
       allAccounts.map(async (account) => {
         try {
           const data = await fetchTeamApi('/api/teams', 'GET', undefined, undefined, account.personalOrgId) as { teams: TeamDetails[] };
-          return data.teams || [];
+          return (data.teams || []).map((team) => ({
+            ...team,
+            sourcePersonalOrgId: account.personalOrgId,
+            sourceEmail: account.email,
+          }));
         } catch (err) {
           logger.main.error(`[TeamService] listTeams error for account ${account.email}:`, err);
           return [];
@@ -691,35 +706,15 @@ async function createTeam(name: string, workspacePath?: string, accountOrgId?: s
 
   logger.main.info('[TeamService] Team created:', result.orgId, name);
 
-  // Set up encryption: identity key + org key + self-wrap
-  try {
-    const orgJwt = await getOrgScopedJwt(result.orgId, accountOrgId);
-
-    // 1. Ensure identity key pair exists
-    await getOrCreateIdentityKeyPair();
-
-    // 2. Upload public key to the new team org
-    await uploadIdentityKeyToOrg(orgJwt);
-
-    // 3. Generate org encryption key
-    await generateAndStoreOrgKey(result.orgId);
-
-    // 4. Post initial org key fingerprint to server
-    const initialFingerprint = getOrgKeyFingerprint(result.orgId);
-    if (initialFingerprint) {
-      await fetchTeamApi(`/api/teams/${result.orgId}/org-key-fingerprint`, 'PUT', { fingerprint: initialFingerprint }, result.orgId);
-    }
-
-    // 5. Wrap org key for self and upload envelope
-    const myPublicKeyJwk = await exportPublicKeyJwk();
-    const envelope = await wrapOrgKeyForMember(result.orgId, myPublicKeyJwk);
-    await uploadEnvelope(result.orgId, result.creatorMemberId, envelope, orgJwt);
-
-    logger.main.info('[TeamService] Encryption set up for team:', result.orgId);
-  } catch (err) {
-    // Team was created but encryption setup failed -- log but don't fail
-    logger.main.error('[TeamService] Encryption setup failed for team:', result.orgId, err);
-  }
+  // Team collaboration is always server-managed. Never create a client-custodied
+  // team key for a new org; the personal/mobile zero-knowledge lane is separate.
+  await initializeServerManagedOrganization(result.orgId, {
+    setServerManaged: async (orgId) => {
+      const orgJwt = await getOrgScopedJwt(orgId, accountOrgId);
+      await setTeamKeyCustodyMode(orgId, 'server-managed', orgJwt);
+    },
+  });
+  logger.main.info('[TeamService] Server-managed encryption enabled for team:', result.orgId);
 
   return {
     orgId: result.orgId,
@@ -816,6 +811,14 @@ async function moveProjectToOrg(
     projectId, destOrgId, dropMemberEmails,
   }, srcOrgId) as MoveResultSummary;
   logger.main.info('[TeamService] Project moved:', projectId, srcOrgId, '->', destOrgId, result);
+  try {
+    await getCollabBackupService().markSuperseded(
+      { orgId: srcOrgId, projectId },
+      { orgId: destOrgId, projectId: result.destTeamProjectId },
+    );
+  } catch (error) {
+    logger.main.warn('[TeamService] Could not mark pre-move collaboration backup as superseded', error);
+  }
   invalidateListTeamsCache();
   return result;
 }
@@ -832,6 +835,16 @@ async function mergeOrg(
     survivorOrgId, deleteDrained, dropMemberEmails,
   }, drainedOrgId) as MergeResultSummary;
   logger.main.info('[TeamService] Org merged:', drainedOrgId, '->', survivorOrgId, result);
+  try {
+    for (const project of result.movedProjects) {
+      await getCollabBackupService().markSuperseded(
+        { orgId: drainedOrgId, projectId: project.projectId },
+        { orgId: survivorOrgId, projectId: project.destTeamProjectId },
+      );
+    }
+  } catch (error) {
+    logger.main.warn('[TeamService] Could not mark pre-merge collaboration backups as superseded', error);
+  }
   invalidateListTeamsCache();
   return result;
 }
@@ -898,6 +911,12 @@ async function inviteMember(orgId: string, email: string): Promise<void> {
 async function removeMember(orgId: string, memberId: string): Promise<void> {
   const orgJwt = await getOrgScopedJwt(orgId);
   const serverUrl = getCollabServerUrl();
+
+  if ((await fetchTeamKeyStatus(orgId, orgJwt)).mode === 'server-managed') {
+    await fetchTeamApi(`/api/teams/${orgId}/members/${memberId}`, 'DELETE', undefined, orgId);
+    logger.main.info('[TeamService] Member removed from server-managed organization:', memberId);
+    return;
+  }
 
   // Step 1: Rotate key and re-encrypt all data BEFORE removing the member.
   // If this fails, the member stays -- fail closed, not fail open.
@@ -1267,7 +1286,6 @@ export async function autoMatchTeamForWorkspace(workspacePath: string): Promise<
       });
 
       // Notify all renderer windows about the team match
-      const { BrowserWindow } = await import('electron');
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('team:workspace-matched', {
           orgId: result.team.orgId,
@@ -1646,6 +1664,7 @@ export function registerTeamHandlers(): void {
   safeHandle('team:list', async () => {
     try {
       const teams = await listTeams();
+      scheduleSilentEncryptionMigrations(teams);
       return { success: true, teams };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -1677,6 +1696,10 @@ export function registerTeamHandlers(): void {
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
+  });
+
+  safeHandle('team:get-encryption-migration-status', async (_event, orgId: string) => {
+    return { success: true, migration: getSilentMigrationState(orgId) };
   });
 
   safeHandle('team:create', async (_event, name: string, workspacePath?: string, accountOrgId?: string) => {
@@ -1905,7 +1928,10 @@ export function registerTeamHandlers(): void {
       if (!remote) {
         return { success: false, error: 'No git remote found for workspace' };
       }
-      const { database } = await import('../database/PGLiteDatabaseWorker');
+      const database = getDatabase();
+      if (!database) {
+        return { success: false, error: 'Database is not initialized' };
+      }
       const result = await reEncryptTrackerFromLocal(orgId, remote, orgJwt, serverUrl, workspacePath, database);
       return { success: true, ...result };
     } catch (error) {
@@ -1924,6 +1950,28 @@ export function registerTeamHandlers(): void {
     if (authState.isAuthenticated) {
       syncOrgProjectionFromServer().catch(err =>
         logger.main.warn('[TeamService] auth-change org projection sync failed:', err));
+      listTeams().then(scheduleSilentEncryptionMigrations).catch(err =>
+        logger.main.warn('[TeamService] auth-change encryption migration scan failed:', err));
     }
+  });
+}
+
+function scheduleSilentEncryptionMigrations(teams: TeamDetails[]): void {
+  queueMicrotask(() => {
+    void runSilentTeamEncryptionMigrations(teams, {
+      getStatus: async (orgId) => {
+        const orgJwt = await getOrgScopedJwt(orgId);
+        return (await fetchTeamKeyStatus(orgId, orgJwt)).mode;
+      },
+      migrate: async (orgId) => {
+        await migrateTeamToServerManaged(orgId);
+      },
+    }).then((result) => {
+      if (result.attempted > 0) {
+        logger.main.info('[TeamService] Silent encryption migration scan complete', result);
+      }
+    }).catch((error) => {
+      logger.main.warn('[TeamService] Silent encryption migration scan failed', error);
+    });
   });
 }

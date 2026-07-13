@@ -73,8 +73,11 @@ import {
   settingsInitialCategoryAtom,
   settingsInitialScopeAtom,
   settingsKeyAtom,
+  settingsDestinationAtom,
   setSettingsInitialCategoryAtom,
   setSettingsInitialScopeAtom,
+  setSettingsDestinationAtom,
+  navigateSettingsInPlaceAtom,
   incrementSettingsKeyAtom,
   clearSettingsNavigationAtom,
   openSettingsCommandAtom,
@@ -496,8 +499,11 @@ export default function App() {
   const settingsInitialCategory = useAtomValue(settingsInitialCategoryAtom);
   const settingsInitialScope = useAtomValue(settingsInitialScopeAtom);
   const settingsKey = useAtomValue(settingsKeyAtom);
+  const settingsDestination = useAtomValue(settingsDestinationAtom);
+  const navigateSettingsInPlace = useSetAtom(navigateSettingsInPlaceAtom);
   const setSettingsInitialCategory = useSetAtom(setSettingsInitialCategoryAtom);
   const setSettingsInitialScope = useSetAtom(setSettingsInitialScopeAtom);
+  const setSettingsDestination = useSetAtom(setSettingsDestinationAtom);
   const incrementSettingsKey = useSetAtom(incrementSettingsKeyAtom);
   const clearSettingsNavigation = useSetAtom(clearSettingsNavigationAtom);
   const [marketplaceInstallRequest, setMarketplaceInstallRequest] = useState<{
@@ -594,15 +600,13 @@ export default function App() {
         },
         // Settings deep link helpers
         openAgentPermissions: () => {
-          setSettingsInitialCategory('agent-permissions');
-          setSettingsInitialScope('project');
-          incrementSettingsKey();
+          // In-place nav clears any stale deep-link destination so it can't
+          // override this scope/category (settings review finding).
+          navigateSettingsInPlace({ category: 'project-agent-permissions', scope: 'project' });
           setTimeout(() => setActiveMode('settings'), 0);
         },
-        openSettings: (category?: any, scope?: 'user' | 'project') => {
-          if (category) setSettingsInitialCategory(category);
-          if (scope) setSettingsInitialScope(scope);
-          incrementSettingsKey();
+        openSettings: (category?: any, scope?: 'application' | 'personal' | 'organization' | 'project') => {
+          navigateSettingsInPlace({ category, scope });
           setTimeout(() => setActiveMode('settings'), 0);
         },
         // Expose DocumentModelRegistry for multi-editor coordination tests
@@ -1123,10 +1127,12 @@ export default function App() {
         }));
       },
       restoreSettings: (state) => {
-        // Switch to settings mode and select the category
-        setSettingsInitialCategory(state.category as any);
-        setSettingsInitialScope(state.scope);
-        incrementSettingsKey();
+        // Switch to settings mode and select the category. In-place nav clears
+        // any stale deep-link destination so restored scope/category holds.
+        navigateSettingsInPlace({
+          category: state.category as any,
+          scope: state.scope === 'user' ? 'application' : state.scope,
+        });
       },
     });
   }, []);
@@ -1141,8 +1147,12 @@ export default function App() {
     if (!openSettingsCommand || openSettingsCommand.timestamp === openSettingsCommandProcessedRef.current) return;
     openSettingsCommandProcessedRef.current = openSettingsCommand.timestamp;
 
-    setSettingsInitialCategory(openSettingsCommand.category);
-    if (openSettingsCommand.scope) setSettingsInitialScope(openSettingsCommand.scope);
+    const destination = openSettingsCommand.destination;
+    setSettingsDestination(destination);
+    setSettingsInitialCategory(destination?.category ?? openSettingsCommand.category);
+    if (destination?.scope ?? openSettingsCommand.scope) {
+      setSettingsInitialScope(destination?.scope ?? openSettingsCommand.scope);
+    }
     incrementSettingsKey();
     setTimeout(() => setActiveMode('settings'), 0);
 
@@ -1159,7 +1169,7 @@ export default function App() {
       };
       setTimeout(tryScroll, 50);
     }
-  }, [openSettingsCommand, setSettingsInitialCategory, setSettingsInitialScope, incrementSettingsKey]);
+  }, [openSettingsCommand, setSettingsDestination, setSettingsInitialCategory, setSettingsInitialScope, incrementSettingsKey]);
 
   // Custom event dispatched by the runtime-side CodexAuthRequiredWidget. Lives
   // in renderer because the widget cannot reach the renderer's jotai store
@@ -1169,7 +1179,7 @@ export default function App() {
       const detail = (event as CustomEvent<{ anchor?: string }>).detail;
       store.set(openSettingsCommandAtom, {
         category: 'openai-codex',
-        scope: 'user',
+        scope: 'application',
         anchor: detail?.anchor ?? 'codex-auth-section',
         timestamp: Date.now(),
       });
@@ -2157,16 +2167,14 @@ export default function App() {
           setActiveMode('settings');
         }}
         onNavigateSettings={(scope, category) => {
-          if (category) setSettingsInitialCategory(category);
-          setSettingsInitialScope(scope);
-          incrementSettingsKey();
+          // In-place nav clears any stale deep-link destination so it can't
+          // override this scope/category (settings review finding).
+          navigateSettingsInPlace({ category, scope });
           setTimeout(() => setActiveMode('settings'), 0);
         }}
         onOpenPermissions={() => {
           // Deep link to agent permissions settings
-          setSettingsInitialCategory('agent-permissions');
-          setSettingsInitialScope('project');
-          incrementSettingsKey(); // Force SettingsView remount
+          navigateSettingsInPlace({ category: 'project-agent-permissions', scope: 'project' });
           setTimeout(() => setActiveMode('settings'), 0);
         }}
         onOpenFeedback={handleOpenFeedback}
@@ -2407,6 +2415,7 @@ export default function App() {
                   workspaceName={workspaceName}
                   initialCategory={settingsInitialCategory}
                   initialScope={settingsInitialScope}
+                  initialDestination={settingsDestination}
                   marketplaceInstallRequest={marketplaceInstallRequest}
                   onMarketplaceInstallRequestHandled={clearMarketplaceInstallRequest}
                   onClose={() => {
@@ -2476,7 +2485,7 @@ export default function App() {
       <ProjectTrustToast
         workspacePath={workspacePath}
         onOpenSettings={() => {
-          setSettingsInitialCategory('agent-permissions');
+          setSettingsInitialCategory('project-agent-permissions');
           setSettingsInitialScope('project');
           incrementSettingsKey();
           setTimeout(() => setActiveMode('settings'), 0);

@@ -850,6 +850,13 @@ export function getPersonalSessionJwt(): PersonalJwt | null {
   return jwt ? asPersonalJwt(jwt) : null;
 }
 
+/** Personal/mobile-sync JWT for an explicit signed-in account. */
+export function getPersonalSessionJwtForAccount(personalOrgId: string): PersonalJwt | null {
+  if (personalOrgId === primaryAccountId) return getPersonalSessionJwt();
+  const jwt = accounts.get(personalOrgId)?.sessionJwt;
+  return jwt ? asPersonalJwt(jwt) : null;
+}
+
 /**
  * Refresh the personal-org-scoped JWT via session exchange.
  * Called by SyncManager to keep the personal JWT fresh for session sync.
@@ -1214,8 +1221,12 @@ export async function addAccount(serverUrl?: string): Promise<{ success: boolean
  * deletes across all storage layers and deletes the Stytch member.
  * On success, clears local credentials and signs out.
  */
-export async function deleteAccount(serverUrl?: string): Promise<{ success: boolean; error?: string }> {
-  if (!authState.isAuthenticated || !authState.sessionJwt) {
+export async function deleteAccount(personalOrgId?: string, serverUrl?: string): Promise<{ success: boolean; error?: string }> {
+  const targetPersonalOrgId = personalOrgId ?? authState.personalOrgId ?? undefined;
+  const personalJwt = targetPersonalOrgId
+    ? getPersonalSessionJwtForAccount(targetPersonalOrgId)
+    : getPersonalSessionJwt();
+  if (!authState.isAuthenticated || !personalJwt) {
     return { success: false, error: 'Not authenticated' };
   }
 
@@ -1237,7 +1248,7 @@ export async function deleteAccount(serverUrl?: string): Promise<{ success: bool
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authState.sessionJwt}`,
+        'Authorization': `Bearer ${personalJwt}`,
       },
     });
 
@@ -1250,8 +1261,8 @@ export async function deleteAccount(serverUrl?: string): Promise<{ success: bool
     const data = await response.json() as { deleted: boolean };
     logger.main.info('[StytchAuthService] Account deletion response:', data);
 
-    // Clear local state (same as sign out)
-    await signOut();
+    if (targetPersonalOrgId) await removeAccount(targetPersonalOrgId);
+    else await signOut();
 
     logger.main.info('[StytchAuthService] Account deleted successfully');
     return { success: true };

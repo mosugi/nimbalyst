@@ -767,6 +767,11 @@ export interface SyncConfig {
   idleTimeoutMinutes?: number; // minutes before user is considered idle (default: 5)
   personalOrgId?: string; // persisted sync identity -- which org to use for sync room IDs
   personalUserId?: string;
+  personalSyncProfiles?: Record<string, {
+    enabledProjects: string[];
+    docSyncEnabledProjects: string[];
+    preventSleepMode?: 'off' | 'always' | 'pluggedIn';
+  }>;
   preventSleepWhenSyncing?: boolean; // DEPRECATED: migrated to preventSleepMode
   preventSleepMode?: 'off' | 'always' | 'pluggedIn'; // prevent system sleep while sync is active
 }
