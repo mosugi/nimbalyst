@@ -17,6 +17,7 @@ import { findTeamForWorkspace, getOrgScopedJwt } from '../services/TeamService';
 import { getOrgIdFromJwt, getJwtExp } from '../services/jwtOrg';
 import { getOrgKey, getOrgKeyFingerprint, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg, fetchAndUnwrapOrgKey, clearOrgKey, fetchTeamKeyStatus, getArchivedOrgKeys } from '../services/OrgKeyService';
 import { getWorkspaceState, updateWorkspaceState } from '../utils/store';
+import { createSingleFlight } from '../utils/asyncCache';
 import { getPersonalDocSyncConfig, isSyncEnabled } from '../services/SyncManager';
 import { resolveCollabDocumentType } from './collabDocumentTypeResolver';
 import { getSyncId } from '../services/DocSyncService';
@@ -831,9 +832,9 @@ export function registerDocumentSyncHandlers(): void {
    * Returns: { success: true, config: { orgId, orgKeyBase64, serverUrl, userId } }
    *       | { success: false, error: string }
    */
-  safeHandle('document-sync:resolve-index-config', async (_event, payload: {
+  async function resolveIndexConfig(payload: {
     workspacePath: string;
-  }) => {
+  }) {
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated. Sign in first.' };
     }
@@ -951,6 +952,19 @@ export function registerDocumentSyncHandlers(): void {
         userEmail: getUserEmail() || undefined,
       },
     };
+  }
+
+  // Collapses a burst of concurrent `document-sync:resolve-index-config`
+  // calls for the same workspace (initSharedDocuments, tracker sync, collab
+  // backup, local-origin service all fan out at startup) into one team-
+  // resolve + key-status + org-key-envelope run. collab-open-latency
+  // investigation (RC4).
+  const resolveIndexConfigSingleFlight = createSingleFlight<string, Awaited<ReturnType<typeof resolveIndexConfig>>>();
+
+  safeHandle('document-sync:resolve-index-config', async (_event, payload: {
+    workspacePath: string;
+  }) => {
+    return resolveIndexConfigSingleFlight(payload.workspacePath, () => resolveIndexConfig(payload));
   });
 
   // --------------------------------------------------------------------------

@@ -27,6 +27,7 @@ import { getNormalizedGitRemote } from '../utils/gitUtils';
 import { resolveTeamForRemoteHash } from './teamProjectResolver';
 import { getCollabSyncHttpUrl } from '../utils/collabSyncUrl';
 import { assertJwtMatchesOrg, getJwtExp, AuthContextMismatchError } from './jwtOrg';
+import { createSingleFlight } from '../utils/asyncCache';
 import {
   getAccounts,
   getPersonalSessionJwt,
@@ -533,13 +534,16 @@ function getMemberIdFromJwt(jwt: string): string | null {
  * List all teams the current user belongs to, across all signed-in accounts.
  * Queries each account's teams and deduplicates by orgId.
  */
-// Short-TTL cache: findTeamForWorkspace is fanned out from many sites
-// (workspace open, sync init, tracker init, body-doc service, etc.) and each
-// listTeams call hits /api/teams once per signed-in account. Without this,
-// opening a workspace can trigger a parallel HTTP storm and the same call
-// repeats every few hundred ms during init.
+// findTeamForWorkspace is fanned out from many sites (workspace open, sync
+// init, tracker init, body-doc service, etc.) and each listTeams call hits
+// /api/teams once per signed-in account. A short TTL just turned that into a
+// steady-state poll -- org/team membership changes ~never mid-session, so the
+// cache is long-lived and correctness comes from event-driven invalidation
+// (auth change, team join/leave/create/delete, manual refresh -- see
+// invalidateListTeamsCache() call sites) rather than a short expiry.
+// collab-open-latency investigation (RC4), 2026-07-14.
 let listTeamsCache: { promise: Promise<TeamDetails[]>; expiresAt: number } | null = null;
-const LIST_TEAMS_TTL_MS = 5000;
+const LIST_TEAMS_TTL_MS = 5 * 60_000;
 
 export function invalidateListTeamsCache(): void {
   listTeamsCache = null;
@@ -686,6 +690,28 @@ export async function findPendingInviteForWorkspace(workspacePath: string): Prom
   }
 }
 
+type FindForWorkspaceResult = { success: true; team: TeamDetails | null };
+
+async function findTeamOrPendingInviteForWorkspace(workspacePath: string): Promise<FindForWorkspaceResult> {
+  // Try active team match first
+  const team = await findTeamForWorkspace(workspacePath);
+  if (team) {
+    return { success: true, team };
+  }
+  // Also check for pending invites matching this workspace
+  const pendingInvite = await findPendingInviteForWorkspace(workspacePath);
+  if (pendingInvite) {
+    return { success: true, team: pendingInvite };
+  }
+  return { success: true, team: null };
+}
+
+// Collapses a burst of concurrent `team:find-for-workspace` IPC calls for the
+// same workspace (e.g. many tracker rooms opening at once) into one
+// findTeamForWorkspace/findPendingInviteForWorkspace run. collab-open-latency
+// investigation (RC4): these calls were seen staircasing 5-deep, 2.8-6.7s.
+const findForWorkspaceSingleFlight = createSingleFlight<string, FindForWorkspaceResult>();
+
 /**
  * Create a new team (Stytch org + D1 metadata + encryption key setup).
  * Returns the new team details. Does NOT modify global auth state.
@@ -716,6 +742,11 @@ async function createTeam(name: string, workspacePath?: string, accountOrgId?: s
     },
   });
   logger.main.info('[TeamService] Server-managed encryption enabled for team:', result.orgId);
+
+  // The new org must be visible to findTeamForWorkspace/listTeams immediately
+  // (e.g. the "Create Team" flow expects to route this workspace to it right
+  // away), not after the long listTeams TTL expires.
+  invalidateListTeamsCache();
 
   return {
     orgId: result.orgId,
@@ -872,7 +903,10 @@ async function acceptInvite(orgId: string): Promise<TeamDetails> {
     logger.main.warn('[TeamService] Encryption setup after invite accept (non-fatal):', err);
   }
 
-  // 3. Fetch team details now that we're an active member
+  // 3. Fetch team details now that we're an active member. Invalidate first --
+  // with the long listTeams TTL, a pre-join cache entry would otherwise make
+  // this lookup miss the team we just joined.
+  invalidateListTeamsCache();
   const teams = await listTeams();
   const team = teams.find(t => t.orgId === orgId);
   if (!team) {
@@ -952,6 +986,7 @@ async function deleteTeam(orgId: string): Promise<void> {
   await fetchTeamApi(`/api/teams/${orgId}`, 'DELETE', undefined, orgId);
   // Clear cached org JWT since the org no longer exists
   orgJwtCache.delete(orgId);
+  invalidateListTeamsCache();
   logger.main.info('[TeamService] Team deleted:', orgId);
 }
 
@@ -1686,17 +1721,7 @@ export function registerTeamHandlers(): void {
 
   safeHandle('team:find-for-workspace', async (_event, workspacePath: string) => {
     try {
-      // Try active team match first
-      const team = await findTeamForWorkspace(workspacePath);
-      if (team) {
-        return { success: true, team };
-      }
-      // Also check for pending invites matching this workspace
-      const pendingInvite = await findPendingInviteForWorkspace(workspacePath);
-      if (pendingInvite) {
-        return { success: true, team: pendingInvite };
-      }
-      return { success: true, team: null };
+      return await findForWorkspaceSingleFlight(workspacePath, () => findTeamOrPendingInviteForWorkspace(workspacePath));
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -1959,6 +1984,11 @@ export function registerTeamHandlers(): void {
   // bootstrap single-flight: team API requests can refresh a token, and that
   // refresh emits a re-entrant authenticated state before the request completes.
   onAuthStateChange((authState) => {
+    // Any auth transition (sign-in, sign-out, account switch, token refresh)
+    // can change which orgs the caller's JWTs are valid for -- drop the long-
+    // lived listTeams cache so the next read reflects it instead of serving
+    // a pre-transition snapshot for the rest of the TTL window.
+    invalidateListTeamsCache();
     if (authState.isAuthenticated) {
       void runAuthenticatedTeamBootstrap();
     }
