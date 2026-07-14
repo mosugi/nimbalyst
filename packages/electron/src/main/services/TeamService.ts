@@ -1525,7 +1525,7 @@ export async function syncOrgProjectionFromServer(): Promise<{
     }
 
     const counts = await backfillProjection(db, orgs);
-    logger.main.info('[TeamService] org projection synced:', counts);
+    // logger.main.info('[TeamService] org projection synced:', counts);
     return { success: true, counts };
   } catch (err) {
     logger.main.error('[TeamService] syncOrgProjectionFromServer error:', err);
