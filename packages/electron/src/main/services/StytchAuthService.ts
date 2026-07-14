@@ -27,6 +27,7 @@ import { STYTCH_CONFIG, asPersonalJwt, asPersonalMemberId, type PersonalJwt, typ
 import { getSessionSyncConfig, setSessionSyncConfig } from '../utils/store';
 import { AnalyticsService } from './analytics/AnalyticsService';
 import { reconcilePersonalUserId } from './auth/personalUserIdReconcile';
+import { resetSilentMigrationScanState } from './SilentTeamEncryptionMigration';
 
 // Stytch types
 interface StytchUser {
@@ -1132,6 +1133,7 @@ export async function sendMagicLink(
  */
 export async function signOut(): Promise<void> {
   // Clear local state
+  resetSilentMigrationScanState();
   clearStytchCredentials();
   accounts.clear();
   primaryAccountId = null;
