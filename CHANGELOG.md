@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Claude Agent model picker no longer lists duplicate "(1M)" rows — current models already run their full context window on their single row.
 - Completed tracker reference chips now show a checkmark and crossed-out text in documents and AI chats.
 - Mobile session sync now skips messages the mobile transcript never displays, cutting sync storage and traffic.
+- Codex is now enabled by default and the Claude Code CLI is now opt-in; existing choices are preserved.
 
 ### Fixed
 - Attachments in shared documents no longer disappear after an image is moved, deleted-and-undone, or edited by a collaborator — images now stay put for everyone.

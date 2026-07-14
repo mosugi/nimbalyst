@@ -1168,11 +1168,12 @@ export interface AIProviderSettings {
 const defaultProviders: Record<string, ProviderConfig> = {
   claude: { enabled: false, testStatus: 'idle' },
   'claude-code': { enabled: true, testStatus: 'idle', installStatus: 'not-installed' },
-  // Subscription CLI. On by default like `claude-code` (main treats undefined as
-  // enabled); listed here so the renderer toggle renders in the correct state.
-  'claude-code-cli': { enabled: true, testStatus: 'idle' },
+  // Subscription CLI. Off by default; listed here so the renderer toggle renders
+  // in the correct state.
+  'claude-code-cli': { enabled: false, testStatus: 'idle' },
   openai: { enabled: false, testStatus: 'idle' },
-  'openai-codex': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
+  // Codex app server. On by default.
+  'openai-codex': { enabled: true, testStatus: 'idle', installStatus: 'not-installed' },
   'openai-codex-acp': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
   opencode: { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
   'copilot-cli': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
