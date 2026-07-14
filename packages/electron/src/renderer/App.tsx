@@ -475,19 +475,11 @@ export default function App() {
   const setRailActivePath = useSetAtom(activeWorkspacePathAtom);
   // NOTE: fileTree, sidebarWidth, isNewFileDialogOpen, newFileDirectory, isHistoryDialogOpen moved to EditorMode
   // NOTE: Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, ProjectQuickOpen) are now managed by DialogProvider
-  // NOTE: isAIChatCollapsed, aiChatWidth moved to EditorMode for workspace mode
-  // These are kept for potential single-file mode or agent mode use
-  const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
-  const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   // NOTE: KeyboardShortcutsDialog, DiscordInvitation, FeedbackIntakeDialog, ApiKeyDialog are now managed by DialogProvider
   // NOTE: WindowsClaudeCodeWarning now managed by DialogProvider via useOnboarding hook
-  const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
-  // Planning mode for AI sidebar (Claude Code safety). Default ON
-  const [aiPlanningModeEnabled, setAIPlanningModeEnabled] = useState<boolean>(true);
   // Force show trust toast (when user wants to change permission mode)
   const [forceShowTrustToast, setForceShowTrustToast] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; workspacePath?: string } | null>(null);
-  const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
   // NOTE: diffError and projectSelection are now managed by DialogProvider
 
   // NOTE: UnifiedOnboarding state now managed by DialogProvider via useOnboarding hook
@@ -718,23 +710,6 @@ export default function App() {
       });
   }, [workspacePath, setDiffTreeGroupByDirectory, setAgentFileScopeMode, hydrateFileGutterCollapsed]);
 
-  // Save active mode when it changes
-  useEffect(() => {
-    // console.log('[App Layout] Active mode changed to:', activeMode, 'workspacePath:', workspacePath);
-
-    if (!workspacePath || !window.electronAPI?.invoke) return;
-
-    const updates = { activeMode };
-    // console.log('[App Layout] Saving updates:', JSON.stringify(updates));
-    window.electronAPI.invoke('workspace:update-state', workspacePath, updates)
-      .then((result) => {
-        // console.log('[App Layout] Successfully saved active mode:', activeMode, 'result:', result);
-      })
-      .catch(error => {
-        console.error('[ContentMode] Failed to save active mode:', error);
-      });
-  }, [activeMode, workspacePath]);
-
   // Initialize tracker panel state from workspace state
   useEffect(() => {
     if (workspacePath) {
@@ -920,11 +895,6 @@ export default function App() {
   // NOTE: useHMRStateRestoration removed - no longer needed now that TabEditor
   // manages all editor state and useTabs persists tabs to localStorage. During HMR, tabs will
   // be restored from localStorage and editors recreated from tab content.
-
-  // Prepare AI chat state loading
-  useEffect(() => {
-    setIsAIChatStateLoaded(false);
-  }, []);
 
   // NOTE: Sidebar width loading moved to EditorMode
 
@@ -1633,30 +1603,9 @@ export default function App() {
     return () => window.removeEventListener('open-ai-session', handleOpenAiSession as unknown as EventListener);
   }, [activeMode]);
 
-  // Save AI Chat state when it changes (but only after initial load)
-  useEffect(() => {
-    if (!workspacePath || !workspaceMode || !isAIChatStateLoaded) return;
-    if (!window.electronAPI?.invoke) return;
-
-    const saveAIChatState = async () => {
-      try {
-        const aiPanelState = {
-          collapsed: isAIChatCollapsed,
-          width: aiChatWidth,
-          currentSessionId: currentAISessionId || undefined,
-          planningModeEnabled: aiPlanningModeEnabled,
-        };
-        if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Saving AI Chat state:', aiPanelState);
-        await window.electronAPI.invoke('workspace:update-state', workspacePath, {
-          aiPanel: aiPanelState
-        });
-      } catch (error) {
-        console.error('[AI_CHAT] Failed to save AI Chat state:', error);
-      }
-    };
-
-    saveAIChatState();
-  }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, aiPlanningModeEnabled, isAIChatStateLoaded, workspacePath, workspaceMode]);
+  // AI chat layout persistence is owned by EditorMode's workspace-keyed atoms.
+  // Do not mirror the legacy App-local values here: they are not reset on rail
+  // switches and can overwrite the newly active project's persisted layout.
 
   // Handle QuickOpen file selection - delegates to EditorMode and switches mode if needed
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
@@ -1845,12 +1794,8 @@ export default function App() {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setIsAIChatCollapsed,
-    setAIChatWidth,
-    setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen: () => {}, // Unused - KeyboardShortcutsDialog now managed by DialogProvider
-    setAIPlanningMode: setAIPlanningModeEnabled,
     setTheme,
 
     // Refs

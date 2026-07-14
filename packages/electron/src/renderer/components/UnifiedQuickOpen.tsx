@@ -749,7 +749,7 @@ const FilesPane: React.FC<FilesPaneProps> = memo(({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mouseHasMoved, setMouseHasMoved] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const listRef = useRef<HTMLUListElement>(null);
 
   // Load recent files when dialog opens. We pass the explicit workspacePath
@@ -1011,7 +1011,7 @@ const InFilesPane: React.FC<InFilesPaneProps> = memo(({
   const [isSearching, setIsSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mouseHasMoved, setMouseHasMoved] = useState(false);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const listRef = useRef<HTMLUListElement>(null);
   const lastQueryRef = useRef<string>('');
 
@@ -1300,7 +1300,7 @@ const SessionsPane: React.FC<SessionsPaneProps> = memo(({
   const [contentSearchedQuery, setContentSearchedQuery] = useState<string | null>(null);
   const [contentSearching, setContentSearching] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
-  const searchDebounceRef = useRef<NodeJS.Timeout>();
+  const searchDebounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const visibleQuery = isActive ? query : '';
 
   // @ typeahead — only active when query starts with @ and no file is selected yet

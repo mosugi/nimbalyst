@@ -28,6 +28,7 @@ import {
   type WorkstreamResource,
 } from '../../store/atoms/workstreamState';
 import { fileDeletedAtomFamily } from '../../store/atoms/fileWatch';
+import { shouldSkipResourceMirror } from './workstreamTabsMirror';
 
 export interface WorkstreamEditorTabsRef {
   openFile: (filePath: string) => void;
@@ -75,6 +76,11 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
     const prevTabCountRef = useRef(tabs.length);
     // Track restore state: 'pending' -> 'restoring' -> 'done'
     const restoreStateRef = useRef<'pending' | 'restoring' | 'done'>('pending');
+    // How many restore-seeded tabs have not yet materialized in TabsContext.
+    // The persist effect must not mirror an empty tab set while this is > 0
+    // (NIM-1680: the transient [] flips hasOpenResources false and the panel's
+    // auto-collapse unmounts the strip — the just-opened tab flashes closed).
+    const pendingSeedCountRef = useRef(0);
 
     // Restore tabs from workstream state on mount.
     // Wait for workstream states to finish loading from IPC before reading
@@ -103,6 +109,7 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
       // console.log('[WorkstreamEditorTabs] Restoring resources:', openResources.length, 'active:', activeResourceId);
 
       if (openResources.length > 0) {
+        pendingSeedCountRef.current = openResources.length;
         for (const tab of openResources) {
           const r = tab.resource;
           const tabKey = r.kind === 'tracker' ? trackerResourceId(r.trackerItemId) : r.filePath;
@@ -130,6 +137,19 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
       if (tabs.length !== prevTabCountRef.current) {
         prevTabCountRef.current = tabs.length;
         setTabCount({ sessionId: workstreamId, count: tabs.length });
+      }
+
+      // Seeded tabs have materialized; empty mirrors are legitimate from here.
+      if (tabs.length > 0) {
+        pendingSeedCountRef.current = 0;
+      }
+      if (
+        shouldSkipResourceMirror({
+          pendingSeedCount: pendingSeedCountRef.current,
+          tabCount: tabs.length,
+        })
+      ) {
+        return;
       }
 
       // Always sync to workstream state atom (even during restore). This

@@ -119,14 +119,10 @@ interface UseIPCHandlersProps {
   // NOTE: setCurrentFilePath/setCurrentFileName removed - now using refs to prevent re-renders
   // NOTE: setIsDirty removed - TabEditor owns dirty state and calls setDocumentEdited directly
   // NOTE: setIsNewFileDialogOpen removed - EditorMode manages dialogs
-  setIsAIChatCollapsed: (collapsed: boolean) => void;
-  setAIChatWidth: (width: number) => void;
-  setIsAIChatStateLoaded: (loaded: boolean) => void;
   setSessionToLoad: (session: { sessionId: string; workspacePath?: string } | null) => void;
   // NOTE: setIsHistoryDialogOpen removed - EditorMode manages dialogs
   setIsKeyboardShortcutsDialogOpen: (open: boolean) => void;
   setTheme: (theme: any) => void;
-  setAIPlanningMode?: (enabled: boolean) => void;
 
   // Refs
   // NOTE: initialContentRef removed - TabEditor tracks initialContent per-tab
@@ -181,12 +177,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setIsAIChatCollapsed,
-    setAIChatWidth,
-    setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen,
-    setAIPlanningMode,
     setTheme,
 
     // Refs
@@ -232,12 +224,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceName,
     // NOTE: setCurrentFilePath/setCurrentFileName removed - using refs directly
     // NOTE: setIsDirty removed - dirty state is tracked via isDirtyRef to avoid re-renders
-    setIsAIChatCollapsed,
-    setAIChatWidth,
-    setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen,
-    setAIPlanningMode,
     setTheme,
   });
 
@@ -263,12 +251,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setIsAIChatCollapsed,
-    setAIChatWidth,
-    setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen,
-    setAIPlanningMode,
     setTheme,
   };
 
@@ -305,6 +289,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // Set up listeners and store cleanup functions
     const cleanupFns: Array<() => void> = [];
+    let workspaceOpenRequestVersion = 0;
 
     cleanupFns.push(window.electronAPI.onFileNew(handlersRef.current.handleNew));
 
@@ -314,6 +299,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     cleanupFns.push(window.electronAPI.onFileSave(handlersRef.current.handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handlersRef.current.handleSaveAs));
     cleanupFns.push(window.electronAPI.onWorkspaceOpened(async (data) => {
+      const requestVersion = ++workspaceOpenRequestVersion;
       if (LOG_CONFIG.WORKSPACE_OPS) console.log('[WORKSPACE] Workspace opened:', data);
       handlersRef.current.setWorkspaceMode(true);
       handlersRef.current.setWorkspacePath(data.workspacePath);
@@ -326,25 +312,19 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
       isInitializedRef.current = false;
 
-      // Restore AI Chat state when opening a workspace
+      // Restore the last AI chat session when opening a workspace. Layout is
+      // hydrated and persisted by EditorMode's workspace-keyed atoms.
       try {
         const workspaceState = await window.electronAPI.invoke('workspace:get-state', data.workspacePath);
+        if (requestVersion !== workspaceOpenRequestVersion) return;
         const aiChatState = workspaceState?.aiPanel;
         // console.log('Restoring AI Chat state for workspace:', aiChatState);
-        if (aiChatState) {
-          handlersRef.current.setIsAIChatCollapsed(aiChatState.collapsed);
-          handlersRef.current.setAIChatWidth(aiChatState.width);
-          if (handlersRef.current.setAIPlanningMode) {
-            handlersRef.current.setAIPlanningMode(aiChatState.planningModeEnabled ?? true);
-          }
-          if (aiChatState.currentSessionId) {
-            handlersRef.current.setSessionToLoad({ sessionId: aiChatState.currentSessionId, workspacePath: data.workspacePath });
-          }
+        if (aiChatState?.currentSessionId) {
+          handlersRef.current.setSessionToLoad({ sessionId: aiChatState.currentSessionId, workspacePath: data.workspacePath });
         }
-        handlersRef.current.setIsAIChatStateLoaded(true);
       } catch (error) {
+        if (requestVersion !== workspaceOpenRequestVersion) return;
         console.error('Failed to restore AI Chat state:', error);
-        handlersRef.current.setIsAIChatStateLoaded(true);
       }
 
       // Open welcome tab if no tabs are open
@@ -500,8 +480,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         // Set the session to load - AIChat will pick this up
         handlersRef.current.setSessionToLoad(data);
 
-        // Make sure AI Chat is visible
-        handlersRef.current.setIsAIChatCollapsed(false);
       }));
     }
 

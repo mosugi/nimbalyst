@@ -390,7 +390,7 @@ export function SettingsView({
   // Ref to track if we need to save (for debounce)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSaveRef = useRef(false);
-  const performSaveRef = useRef<() => Promise<void>>();
+  const performSaveRef = useRef<(() => Promise<void>) | undefined>(undefined);
   // NOTE: Notification settings (Phase 2), Advanced settings (Phase 3), Sync settings (Phase 4),
   // AI debug settings (Phase 5), AI provider settings (Phase 5b), and Voice mode settings (Phase 7)
   // have been moved to Jotai atoms in appSettings.ts
