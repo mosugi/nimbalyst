@@ -324,6 +324,30 @@ export class TeamSyncProvider {
     });
   }
 
+  /** Move a document into recoverable Trash without changing its folder. */
+  trashDocument(documentId: string, trashedAt = Date.now()): void {
+    const existing = this.localEntries.get(documentId);
+    if (existing) {
+      this.localEntries.set(documentId, { ...existing, trashedAt });
+    }
+    this.send({
+      type: 'docTrash', documentId, trashedAt,
+      orgKeyFingerprint: this.wireOrgKeyFingerprint,
+    });
+  }
+
+  /** Restore a document to the same folder it occupied before Trash. */
+  restoreDocument(documentId: string): void {
+    const existing = this.localEntries.get(documentId);
+    if (existing) {
+      this.localEntries.set(documentId, { ...existing, trashedAt: null });
+    }
+    this.send({
+      type: 'docRestore', documentId,
+      orgKeyFingerprint: this.wireOrgKeyFingerprint,
+    });
+  }
+
   /** Reparent a document into a folder (null = root). Content untouched. */
   moveDocument(documentId: string, newParentFolderId: string | null): void {
     const existing = this.localEntries.get(documentId);
@@ -676,6 +700,7 @@ export class TeamSyncProvider {
         updatedAt: msg.document.updatedAt,
         lastWriterUserId: msg.document.lastWriterUserId ?? null,
         parentFolderId: msg.document.parentFolderId ?? null,
+        trashedAt: msg.document.trashedAt ?? null,
         decryptFailed: true,
       };
     }
@@ -843,6 +868,7 @@ export class TeamSyncProvider {
           updatedAt: e.updatedAt,
           lastWriterUserId: e.lastWriterUserId ?? null,
           parentFolderId: e.parentFolderId ?? null,
+          trashedAt: e.trashedAt ?? null,
           decryptFailed: true,
         });
       }
@@ -870,6 +896,7 @@ export class TeamSyncProvider {
       updatedAt: encrypted.updatedAt,
       lastWriterUserId: encrypted.lastWriterUserId ?? null,
       parentFolderId: encrypted.parentFolderId ?? null,
+      trashedAt: encrypted.trashedAt ?? null,
     };
   }
 
@@ -1037,7 +1064,7 @@ export class TeamSyncProvider {
 
   private isDocIndexMessage(msg: TeamClientMessage): boolean {
     return msg.type === 'docIndexRegister' || msg.type === 'docIndexUpdate' || msg.type === 'docIndexRemove'
-      || msg.type === 'docMove'
+      || msg.type === 'docTrash' || msg.type === 'docRestore' || msg.type === 'docMove'
       || msg.type === 'folderRegister' || msg.type === 'folderRename'
       || msg.type === 'folderMove' || msg.type === 'folderRemove';
   }

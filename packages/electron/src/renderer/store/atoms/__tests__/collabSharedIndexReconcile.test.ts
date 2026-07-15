@@ -81,6 +81,24 @@ describe('reconcileSharedDocuments (NIM-1638: shared docs must not disappear)', 
     const twice = reconcileSharedDocuments(once, existing);
     expect(twice.map(d => d.documentId).sort()).toEqual(['d1', 'd2']);
   });
+
+  it('preserves and clears authoritative trash state without dropping known rows', () => {
+    const existing = [doc('trashed', 'Old title', { trashedAt: 100 })];
+
+    expect(reconcileSharedDocuments(existing, [
+      doc('trashed', 'Fresh title', { trashedAt: 200 }),
+    ])).toEqual([
+      doc('trashed', 'Fresh title', { trashedAt: 200 }),
+    ]);
+
+    expect(reconcileSharedDocuments(existing, [
+      doc('trashed', 'Restored title', { trashedAt: null }),
+    ])).toEqual([
+      doc('trashed', 'Restored title', { trashedAt: null }),
+    ]);
+
+    expect(reconcileSharedDocuments(existing, [])).toEqual(existing);
+  });
 });
 
 describe('reconcileSharedDocuments (NIM-1636: file name must not go blank)', () => {

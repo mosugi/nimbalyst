@@ -46,6 +46,8 @@ export interface SharedDocument {
    * The tree is built from this + folder nodes, not from splitting the title.
    */
   parentFolderId?: string | null;
+  /** Millisecond epoch when moved to recoverable Trash; null means active. */
+  trashedAt?: number | null;
   /**
    * True when the doc index entry's encrypted title could not be decrypted.
    * Rendered as a locked placeholder in the sidebar; not openable.
@@ -214,7 +216,7 @@ export const activeTeamUserIdAtom = atom<string | null>((get) => {
  * List of shared collaborative documents for the active workspace.
  * Populated from TeamRoom on connect, updated via broadcasts.
  */
-export const sharedDocumentsAtom = atom<SharedDocument[], [SharedDocument[] | ((current: SharedDocument[]) => SharedDocument[])], void>(
+export const allSharedDocumentsAtom = atom<SharedDocument[], [SharedDocument[] | ((current: SharedDocument[]) => SharedDocument[])], void>(
   (get) => {
     const path = get(activeWorkspacePathAtom);
     if (!path) return [];
@@ -230,6 +232,27 @@ export const sharedDocumentsAtom = atom<SharedDocument[], [SharedDocument[] | ((
       set(target, valueOrUpdater);
     }
   }
+);
+
+/** Active shared documents. Trash rows remain in the raw index atom above. */
+export const sharedDocumentsAtom = atom<SharedDocument[], [SharedDocument[] | ((current: SharedDocument[]) => SharedDocument[])], void>(
+  (get) => get(allSharedDocumentsAtom).filter(document => document.trashedAt == null),
+  (get, set, valueOrUpdater) => {
+    // Writers operate on the complete index so an optimistic active-doc update
+    // never discards Trash rows hidden from the public read projection.
+    if (typeof valueOrUpdater === 'function') {
+      set(allSharedDocumentsAtom, valueOrUpdater(get(allSharedDocumentsAtom)));
+    } else {
+      set(allSharedDocumentsAtom, valueOrUpdater);
+    }
+  },
+);
+
+/** Documents currently in recoverable Trash, newest first. */
+export const trashedSharedDocumentsAtom = atom<SharedDocument[]>((get) =>
+  get(allSharedDocumentsAtom)
+    .filter(document => document.trashedAt != null)
+    .sort((a, b) => (b.trashedAt ?? 0) - (a.trashedAt ?? 0)),
 );
 
 /**
@@ -497,6 +520,53 @@ export function removeSharedDocument(documentId: string): void {
       console.error('[collabDocuments] Failed to remove document from index:', err);
     }
   }
+}
+
+/** Move a shared document to recoverable Trash without changing its folder. */
+export function trashSharedDocument(documentId: string): void {
+  const trashedAt = Date.now();
+  store.set(allSharedDocumentsAtom, (current) =>
+    current.map(document => document.documentId === documentId
+      ? { ...document, trashedAt, updatedAt: trashedAt }
+      : document)
+  );
+
+  const provider = getTeamSyncProvider();
+  if (provider) {
+    try {
+      provider.trashDocument(documentId, trashedAt);
+    } catch (err) {
+      console.error('[collabDocuments] Failed to move document to Trash:', err);
+    }
+  }
+}
+
+/** Restore a trashed document to its unchanged original folder. */
+export function restoreSharedDocument(documentId: string): void {
+  const now = Date.now();
+  store.set(allSharedDocumentsAtom, (current) =>
+    current.map(document => document.documentId === documentId
+      ? { ...document, trashedAt: null, updatedAt: now }
+      : document)
+  );
+
+  const provider = getTeamSyncProvider();
+  if (provider) {
+    try {
+      provider.restoreDocument(documentId);
+    } catch (err) {
+      console.error('[collabDocuments] Failed to restore document from Trash:', err);
+    }
+  }
+}
+
+/** Permanently remove every document currently in Trash. */
+export function emptySharedDocumentTrash(): number {
+  const trashed = store.get(trashedSharedDocumentsAtom);
+  for (const document of trashed) {
+    removeSharedDocument(document.documentId);
+  }
+  return trashed.length;
 }
 
 /**
@@ -965,6 +1035,7 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
             updatedAt: d.updatedAt,
             lastWriterUserId: d.lastWriterUserId,
             parentFolderId: d.parentFolderId,
+            trashedAt: d.trashedAt,
             decryptFailed: d.decryptFailed,
           }));
           // NIM-1638: reconcile rather than replace so a partial teamSync
@@ -989,6 +1060,7 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
           updatedAt: d.updatedAt,
           lastWriterUserId: d.lastWriterUserId,
           parentFolderId: d.parentFolderId,
+          trashedAt: d.trashedAt,
           decryptFailed: d.decryptFailed,
         }));
         // NIM-1638: a docIndexSync response fires on every (re)connect and used
@@ -1012,6 +1084,7 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
           updatedAt: document.updatedAt,
           lastWriterUserId: document.lastWriterUserId,
           parentFolderId: document.parentFolderId,
+          trashedAt: document.trashedAt,
           decryptFailed: document.decryptFailed,
         };
         store.set(sharedDocumentsAtomFamily(workspacePath), (current) => {

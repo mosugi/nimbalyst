@@ -594,14 +594,14 @@ const CollabModeInner = forwardRef<CollabModeRef, CollabModeProps>(function Coll
                       Back to editor
                     </button>
                   </div>
-                  <SharedDocsHome onDocumentSelect={handleDocumentSelect} />
+                  <SharedDocsHome workspacePath={workspacePath} onDocumentSelect={handleDocumentSelect} />
                 </div>
               )}
             </>
           </TabManager>
         ) : (
           /* No tabs open: the discovery hub is the full-bleed empty state */
-          <SharedDocsHome onDocumentSelect={handleDocumentSelect} />
+          <SharedDocsHome workspacePath={workspacePath} onDocumentSelect={handleDocumentSelect} />
         )}
       </div>
 

@@ -7,11 +7,19 @@
  * the same `onDocumentSelect` path the sidebar uses.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { SharedDocument } from '../../store/atoms/collabDocuments';
-import { sharedDocumentsAtom } from '../../store/atoms/collabDocuments';
+import {
+  emptySharedDocumentTrash,
+  removeSharedDocument,
+  restoreSharedDocument,
+  sharedDocumentsAtom,
+  teamSyncStatusAtom,
+  trashedSharedDocumentsAtom,
+  trashSharedDocument,
+} from '../../store/atoms/collabDocuments';
 import {
   favoriteSharedDocsAtom,
   recentSharedDocsAtom,
@@ -22,8 +30,14 @@ import {
 } from '../../store/atoms/collabDiscovery';
 import { getCollabNodeName } from './collabTree';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
+import {
+  sweepEmptySharedDocuments,
+  type SharedDocumentCleanupProgress,
+} from '../../utils/sharedDocumentCleanup';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 interface SharedDocsHomeProps {
+  workspacePath: string;
   onDocumentSelect: (doc: SharedDocument) => void;
 }
 
@@ -150,8 +164,10 @@ const SectionHeader: React.FC<{ icon: string; label: string; right?: React.React
   </div>
 );
 
-export const SharedDocsHome: React.FC<SharedDocsHomeProps> = ({ onDocumentSelect }) => {
+export const SharedDocsHome: React.FC<SharedDocsHomeProps> = ({ workspacePath, onDocumentSelect }) => {
   const allDocs = useAtomValue(sharedDocumentsAtom);
+  const trashedDocs = useAtomValue(trashedSharedDocumentsAtom);
+  const teamSyncStatus = useAtomValue(teamSyncStatusAtom);
   const favoriteDocs = useAtomValue(favoriteSharedDocsAtom);
   const recentDocs = useAtomValue(recentSharedDocsAtom);
   const changedDocs = useAtomValue(changedSharedDocsAtom);
@@ -160,6 +176,8 @@ export const SharedDocsHome: React.FC<SharedDocsHomeProps> = ({ onDocumentSelect
 
   const [query, setQuery] = useState('');
   const [allSort, setAllSort] = useState<AllSort>('updated');
+  const [view, setView] = useState<'documents' | 'trash'>('documents');
+  const [cleanupProgress, setCleanupProgress] = useState<SharedDocumentCleanupProgress | null>(null);
 
   const trimmedQuery = query.trim().toLowerCase();
   const hasQuery = trimmedQuery.length > 0;
@@ -192,13 +210,147 @@ export const SharedDocsHome: React.FC<SharedDocsHomeProps> = ({ onDocumentSelect
     setAllSort((s) => (s === 'updated' ? 'name' : s === 'name' ? 'type' : 'updated'));
   const sortLabel = allSort === 'updated' ? 'Last updated' : allSort === 'name' ? 'Name' : 'Type';
 
+  const handleCleanup = useCallback(async () => {
+    if (teamSyncStatus !== 'connected' || cleanupProgress) return;
+    const { inspectSharedDocumentEmptiness } = await import('../../utils/documentSeedOrchestrator');
+    const result = await sweepEmptySharedDocuments(
+      allDocs,
+      (document) => inspectSharedDocumentEmptiness({
+        workspacePath,
+        documentId: document.documentId,
+        documentType: document.documentType,
+        title: document.title,
+      }),
+      trashSharedDocument,
+      setCleanupProgress,
+    );
+    setCleanupProgress(null);
+    if (result.failed > 0) {
+      errorNotificationService.showWarning(
+        'Cleanup finished with skipped documents',
+        `Moved ${result.moved} empty document${result.moved === 1 ? '' : 's'} to Trash; ${result.failed} could not be verified.`,
+        { duration: 7000 },
+      );
+    } else {
+      errorNotificationService.showInfo(
+        'Empty-document cleanup finished',
+        `Moved ${result.moved} empty document${result.moved === 1 ? '' : 's'} to Trash.`,
+        { duration: 5000 },
+      );
+    }
+  }, [allDocs, cleanupProgress, teamSyncStatus, workspacePath]);
+
+  if (view === 'trash') {
+    return (
+      <div className="shared-docs-trash flex-1 overflow-y-auto px-8 py-6 select-text bg-nim">
+        <div className="max-w-[860px] mx-auto">
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div>
+              <button
+                type="button"
+                className="flex items-center gap-1 bg-transparent border-none p-0 mb-2 text-[12px] text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] cursor-pointer"
+                onClick={() => setView('documents')}
+              >
+                <MaterialSymbol icon="arrow_back" size={16} />
+                Shared documents
+              </button>
+              <h1 className="m-0 text-[20px] font-semibold text-[var(--nim-text)]">Trash</h1>
+              <p className="mt-0.5 mb-0 text-[13px] text-[var(--nim-text-faint)]">
+                Documents are permanently removed after 30 days. Restore returns them to their original folder.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[var(--nim-danger)] bg-transparent text-[12px] text-[var(--nim-danger)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--nim-danger)_10%,transparent)] disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={trashedDocs.length === 0 || teamSyncStatus !== 'connected'}
+              onClick={() => {
+                if (window.confirm(`Permanently delete ${trashedDocs.length} document${trashedDocs.length === 1 ? '' : 's'}? This cannot be undone.`)) {
+                  emptySharedDocumentTrash();
+                }
+              }}
+            >
+              <MaterialSymbol icon="delete_forever" size={17} />
+              Empty Trash
+            </button>
+          </div>
+
+          {trashedDocs.length === 0 ? (
+            <div className="rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] px-5 py-10 text-center">
+              <MaterialSymbol icon="delete" size={30} className="text-[var(--nim-text-faint)]" />
+              <p className="mt-2 mb-0 text-[13px] text-[var(--nim-text-muted)]">Trash is empty.</p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] divide-y divide-[var(--nim-border)]">
+              {trashedDocs.map((doc) => (
+                <div key={doc.documentId} className="shared-docs-trash-row flex items-center gap-3 px-3 py-2.5">
+                  <MaterialSymbol icon={iconForDoc(doc.documentType)} size={18} className="text-[var(--nim-text-muted)]" />
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-[13.5px] text-[var(--nim-text)]">{docName(doc)}</div>
+                    <div className="text-[11.5px] text-[var(--nim-text-faint)]">
+                      Trashed {getRelativeTimeString(doc.trashedAt ?? Date.now())}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="px-2.5 py-1 rounded border border-[var(--nim-border)] bg-transparent text-[12px] text-[var(--nim-text)] cursor-pointer hover:bg-[var(--nim-bg-hover)] disabled:opacity-50"
+                    disabled={teamSyncStatus !== 'connected'}
+                    onClick={() => restoreSharedDocument(doc.documentId)}
+                  >
+                    Restore
+                  </button>
+                  <button
+                    type="button"
+                    className="p-1 rounded border-none bg-transparent text-[var(--nim-danger)] cursor-pointer hover:bg-[var(--nim-bg-hover)] disabled:opacity-50"
+                    disabled={teamSyncStatus !== 'connected'}
+                    title="Delete permanently"
+                    aria-label={`Delete ${docName(doc)} permanently`}
+                    onClick={() => {
+                      if (window.confirm(`Permanently delete "${docName(doc)}"? This cannot be undone.`)) {
+                        removeSharedDocument(doc.documentId);
+                      }
+                    }}
+                  >
+                    <MaterialSymbol icon="delete_forever" size={18} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="shared-docs-home flex-1 overflow-y-auto px-8 py-6 select-text bg-nim">
       <div className="max-w-[860px] mx-auto">
-        <h1 className="m-0 text-[20px] font-semibold text-[var(--nim-text)]">Shared documents</h1>
-        <p className="mt-0.5 mb-5 text-[13px] text-[var(--nim-text-faint)]">
-          Find, revisit, and catch up on what your team has been working on.
-        </p>
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <h1 className="m-0 text-[20px] font-semibold text-[var(--nim-text)]">Shared documents</h1>
+            <p className="mt-0.5 mb-0 text-[13px] text-[var(--nim-text-faint)]">
+              Find, revisit, and catch up on what your team has been working on.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[var(--nim-border)] bg-transparent text-[12px] text-[var(--nim-text-muted)] cursor-pointer hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={teamSyncStatus !== 'connected' || allDocs.length === 0 || cleanupProgress !== null}
+              onClick={() => void handleCleanup()}
+            >
+              <MaterialSymbol icon="cleaning_services" size={17} />
+              {cleanupProgress ? `${cleanupProgress.checked}/${cleanupProgress.total}` : 'Clean up empty docs'}
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[var(--nim-border)] bg-transparent text-[12px] text-[var(--nim-text-muted)] cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+              onClick={() => setView('trash')}
+            >
+              <MaterialSymbol icon="delete" size={17} />
+              Trash{trashedDocs.length > 0 ? ` (${trashedDocs.length})` : ''}
+            </button>
+          </div>
+        </div>
 
         {/* Search */}
         <div className="shared-docs-search flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 mb-6 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] focus-within:border-[var(--nim-primary)]">

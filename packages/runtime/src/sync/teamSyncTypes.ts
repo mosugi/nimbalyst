@@ -238,6 +238,8 @@ export interface DocIndexEntry {
    * root level (also legacy rows, whose path still lives in the title).
    */
   parentFolderId?: string | null;
+  /** Millisecond epoch when moved to Trash; null/undefined means active. */
+  trashedAt?: number | null;
   /**
    * True when the server returned a doc index entry whose encrypted title
    * could not be decrypted with the current org key. Preserved in the list

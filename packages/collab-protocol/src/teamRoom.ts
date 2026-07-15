@@ -24,6 +24,8 @@ export type TeamClientMessage =
   | TeamDocIndexRegisterMessage
   | TeamDocIndexUpdateMessage
   | TeamDocIndexRemoveMessage
+  | TeamDocTrashMessage
+  | TeamDocRestoreMessage
   | TeamDocMoveMessage
   | TeamFolderIndexSyncRequestMessage
   | TeamFolderRegisterMessage
@@ -103,6 +105,22 @@ export interface TeamDocIndexUpdateMessage {
 /** Remove a document from the index. See `TeamDocIndexRegisterMessage` for `orgKeyFingerprint`. */
 export interface TeamDocIndexRemoveMessage {
   type: 'docIndexRemove';
+  documentId: string;
+  orgKeyFingerprint?: string | null;
+}
+
+/** Move a document into recoverable Trash without changing its folder. */
+export interface TeamDocTrashMessage {
+  type: 'docTrash';
+  documentId: string;
+  /** Millisecond epoch used to calculate the retention deadline. */
+  trashedAt: number;
+  orgKeyFingerprint?: string | null;
+}
+
+/** Restore a trashed document to its unchanged parent folder. */
+export interface TeamDocRestoreMessage {
+  type: 'docRestore';
   documentId: string;
   orgKeyFingerprint?: string | null;
 }
@@ -352,6 +370,8 @@ export interface EncryptedDocIndexEntry {
    * during the dual-write transition).
    */
   parentFolderId?: string | null;
+  /** Millisecond epoch when moved to Trash; null/undefined means active. */
+  trashedAt?: number | null;
 }
 
 /**
