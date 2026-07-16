@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Commit with AI in a worktree no longer sweeps in ignored files like node_modules when an untracked folder is present, so it proposes only the files you actually changed.
 - Team shared documents and trackers no longer show as locked ("No encryption key available") after a network change or brief server outage.
 - Embedded spreadsheets and code editors in the chat transcript no longer steal focus and scroll-jump the transcript back to themselves.
 - Tracker sidebar counts now match the filtered list and Kanban views.
