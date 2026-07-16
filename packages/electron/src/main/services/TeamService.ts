@@ -79,6 +79,7 @@ import {
   markMemberVerified,
   fingerprintIdentityKey,
   fetchTeamKeyStatus,
+  getLastKnownTeamKeyStatus,
   setTeamKeyCustodyMode,
 } from './OrgKeyService';
 import { performKeyRotation, cleanupOrphanedDocuments, reEncryptTrackerFromLocal } from './KeyRotationService';
@@ -1294,7 +1295,14 @@ function startAutoWrapPolling(orgId: string): void {
         return;
       }
     } catch {
-      // Could not determine mode -- continue with legacy wrapping below.
+      // Could not determine mode (offline, NIM-1778) -- trust the last-known
+      // mode; only continue with legacy wrapping when we have never seen the
+      // org as server-managed.
+      if (getLastKnownTeamKeyStatus(orgId)?.mode === 'server-managed') {
+        clearInterval(interval);
+        autoWrapIntervals.delete(orgId);
+        return;
+      }
     }
 
     try {
@@ -1404,7 +1412,12 @@ export async function autoWrapForNewMembers(orgId: string): Promise<void> {
       return;
     }
   } catch {
-    // Could not determine custody mode -- fall through to legacy wrapping (safe default).
+    // Could not determine custody mode (offline, NIM-1778) -- trust the
+    // last-known mode; only fall through to legacy wrapping when the org has
+    // never been seen as server-managed.
+    if (getLastKnownTeamKeyStatus(orgId)?.mode === 'server-managed') {
+      return;
+    }
   }
 
   try {

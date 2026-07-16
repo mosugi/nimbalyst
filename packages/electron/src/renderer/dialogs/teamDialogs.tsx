@@ -164,9 +164,9 @@ function CreateTeamDialogWrapper({
             <div className="flex items-start gap-2 p-3 bg-[var(--nim-bg-secondary)] rounded-md border border-[var(--nim-bg-tertiary)]">
               <MaterialSymbol icon="lock" size={16} className="text-[var(--nim-success)] shrink-0 mt-0.5" />
               <div>
-                <div className="text-[12px] font-medium text-[var(--nim-text)] mb-0.5">E2E Encrypted</div>
+                <div className="text-[12px] font-medium text-[var(--nim-text)] mb-0.5">Encrypted at rest</div>
                 <div className="text-[11px] text-[var(--nim-text-faint)] leading-snug">
-                  A unique encryption key will be generated for this team. Keys are shared securely via ECDH exchange when members join.
+                  Team data is encrypted at rest, with keys managed by the service. Members can access shared content as soon as they join, with no key exchange or need to be online at the same time.
                 </div>
               </div>
             </div>
