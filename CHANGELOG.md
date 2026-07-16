@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Create diagrams, data models, spreadsheets, mockups, and more directly as shared documents.
 - Shared documents now have a recoverable Trash with empty-document cleanup, restore, manual purge, and automatic 30-day removal.
 - Feature tracker items now have a "Won't Do" status for work decided against.
+- Built-in tracker types can now be customized per workspace -- add, rename, or remove statuses, tweak labels, icons, and colors, or add fields -- and reset back to their defaults at any time.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
