@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Session summaries now end with any unanswered interactive question so pending user input is not lost in the recap.
 - Switching themes no longer freezes the window for several seconds when documents with code blocks are open.
 - Usage indicators (Claude, Codex, Gemini) hidden from the navigation gutter can now be restored by right-clicking the gutter.
 - Commit with AI in a worktree no longer sweeps in ignored files like node_modules when an untracked folder is present, so it proposes only the files you actually changed.
