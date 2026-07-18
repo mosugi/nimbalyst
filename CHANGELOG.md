@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Embedded spreadsheets and code editors in the chat transcript no longer steal focus and scroll-jump the transcript back to themselves.
 - Tracker sidebar counts now match the filtered list and Kanban views.
 - Tracker history now records manual field and content edits.
+- Copying an image from a shared document now places the actual image on the clipboard, and images can be copied via right-click.
 - Pasted markdown links in shared documents now stay clickable instead of becoming literal text.
 - Marking shared documents as read now stays cleared through delayed sync updates, sidebar reopen, and restart.
 - Share to Team now refreshes its folder picker when opened, so newly created, renamed, or moved shared folders appear immediately.
