@@ -2,14 +2,12 @@ import { app } from 'electron';
 
 let appIsActive = process.platform !== 'darwin';
 
-if (process.platform === 'darwin') {
-    app.on('did-become-active', () => {
-        appIsActive = true;
-    });
-    app.on('did-resign-active', () => {
-        appIsActive = false;
-    });
-}
+app.on('did-become-active', () => {
+    appIsActive = true;
+});
+app.on('did-resign-active', () => {
+    appIsActive = false;
+});
 
 interface GuardedWindow {
     isDestroyed(): boolean;

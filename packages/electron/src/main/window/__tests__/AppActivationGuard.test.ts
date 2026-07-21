@@ -94,6 +94,14 @@ describe('runWhenAppIsActive', () => {
     expect(action).toHaveBeenCalledTimes(1);
   });
 
+  it('runs immediately on platforms without macOS activation guarding', () => {
+    const action = vi.fn();
+
+    runWhenAppIsActive(new TestWindow(), action, 'linux');
+
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels a deferred action when its window closes', () => {
     const window = new TestWindow();
     const action = vi.fn();
