@@ -1,70 +1,42 @@
 /**
- * Records the structure, sizes, and cache placement of Claude /v1/messages
- * requests, then forwards them to the real Anthropic API unchanged.
- * Request content is not persisted beyond 120-character block previews.
+ * Records privacy-safe structure, sizes, and cache placement of Claude
+ * /v1/messages requests, then forwards them to the real Anthropic API
+ * unchanged. Request content is represented only by process-scoped HMACs.
  */
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import { randomBytes, randomUUID } from "node:crypto";
+
+import {
+  createRequestSummarizer,
+  fingerprintRequestFamily,
+  summarizeSseResponse,
+} from "./request-summary.mjs";
 
 const port = Number(process.argv[2] || 8377);
 const logPath =
   process.env.CLAUDE_CONTEXT_PROXY_LOG ??
   "/tmp/nimbalyst-claude-context-proxy.jsonl";
 const upstream = "api.anthropic.com";
+const fingerprintKey = randomBytes(32);
+const fingerprintRunId = randomUUID();
+const requestSummarizers = new Map();
+let activeExperiment = null;
+let proxyRequestIndex = 0;
 
-function blockSummary(block) {
-  const text =
-    typeof block === "string" ? block : block.text ?? block.content ?? "";
-  const chars =
-    typeof block === "string" ? block.length : JSON.stringify(block).length;
-  return {
-    type: typeof block === "string" ? "text" : block.type,
-    chars,
-    cacheControl:
-      typeof block === "object" && block.cache_control
-        ? block.cache_control.type
-        : null,
-    preview: String(text).slice(0, 120).replace(/\n/g, " "),
-  };
+function getRequestSummarizer(streamKey) {
+  if (!requestSummarizers.has(streamKey)) {
+    requestSummarizers.set(
+      streamKey,
+      createRequestSummarizer({ fingerprintKey, runId: fingerprintRunId })
+    );
+  }
+  return requestSummarizers.get(streamKey);
 }
 
-function summarize(body) {
-  let parsed;
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    return { parseError: true, chars: body.length };
-  }
-
-  const rawSystem = parsed.system;
-  const system =
-    typeof rawSystem === "string"
-      ? [blockSummary(rawSystem)]
-      : (rawSystem ?? []).map(blockSummary);
-  const tools = (parsed.tools ?? []).map((tool) => ({
-    name: tool.name,
-    chars: JSON.stringify(tool).length,
-    cacheControl: tool.cache_control?.type ?? null,
-  }));
-  const messages = (parsed.messages ?? []).map((message) => ({
-    role: message.role,
-    blocks: Array.isArray(message.content)
-      ? message.content.map(blockSummary)
-      : [blockSummary(message.content)],
-  }));
-
-  return {
-    timestamp: new Date().toISOString(),
-    model: parsed.model,
-    stream: Boolean(parsed.stream),
-    totalChars: body.length,
-    system,
-    tools,
-    toolCount: tools.length,
-    toolChars: tools.reduce((total, tool) => total + tool.chars, 0),
-    messages,
-  };
+function appendRecord(record) {
+  fs.appendFileSync(logPath, `${JSON.stringify(record)}\n`);
 }
 
 http
@@ -75,14 +47,65 @@ http
       const body = Buffer.concat(chunks);
       if (
         request.method === "POST" &&
+        request.url === "/__nimbalyst_context_profile"
+      ) {
+        try {
+          const registration = JSON.parse(body.toString("utf8"));
+          if (registration.phase === "start") {
+            activeExperiment = registration;
+          }
+          appendRecord({
+            recordType: "experiment",
+            timestamp: new Date().toISOString(),
+            ...registration,
+          });
+          if (
+            registration.phase === "complete" &&
+            activeExperiment?.experimentKey === registration.experimentKey
+          ) {
+            activeExperiment = null;
+          }
+          response.writeHead(204);
+          response.end();
+        } catch (error) {
+          response.writeHead(400);
+          response.end(String(error));
+        }
+        return;
+      }
+      let proxiedRequest = null;
+      if (
+        request.method === "POST" &&
         request.url.includes("/v1/messages") &&
         !request.url.includes("count_tokens")
       ) {
         try {
-          fs.appendFileSync(
-            logPath,
-            `${JSON.stringify(summarize(body.toString("utf8")))}\n`
+          const parsed = JSON.parse(body.toString("utf8"));
+          const lane = (parsed.tools?.length ?? 0) > 0 ? "agent" : "auxiliary";
+          const requestFamilyFingerprint = fingerprintRequestFamily(
+            parsed,
+            fingerprintKey
           );
+          const streamKey = `${requestFamilyFingerprint}:${lane}`;
+          const summary = getRequestSummarizer(streamKey).summarize(
+            body.toString("utf8")
+          );
+          proxiedRequest = {
+            proxyRequestIndex: proxyRequestIndex++,
+            lane,
+            requestFamilyFingerprint,
+            summary,
+            experiment: activeExperiment,
+          };
+          appendRecord({
+            recordType: "request",
+            experiment: proxiedRequest.experiment,
+            proxyRequestIndex: proxiedRequest.proxyRequestIndex,
+            lane,
+            requestFamilyFingerprint,
+            laneRequestIndex: summary.requestIndex,
+            ...summary,
+          });
         } catch (error) {
           console.error("Failed to write proxy summary:", error);
         }
@@ -100,7 +123,44 @@ http
             upstreamResponse.statusCode,
             upstreamResponse.headers
           );
-          upstreamResponse.pipe(response);
+          if (!proxiedRequest) {
+            upstreamResponse.pipe(response);
+            return;
+          }
+
+          const responseChunks = [];
+          upstreamResponse.on("data", (chunk) => {
+            response.write(chunk);
+            responseChunks.push(chunk);
+          });
+          upstreamResponse.on("end", () => {
+            response.end();
+            let responseSummary = {
+              model: undefined,
+              stopReason: undefined,
+              diagnostics: undefined,
+              usage: {},
+              contextTokens: 0,
+            };
+            try {
+              responseSummary = summarizeSseResponse(
+                responseChunks,
+                upstreamResponse.headers["content-encoding"]
+              );
+            } catch (error) {
+              console.error("Failed to parse upstream usage:", error.message);
+            }
+            appendRecord({
+              recordType: "response",
+              timestamp: new Date().toISOString(),
+              experiment: proxiedRequest.experiment,
+              proxyRequestIndex: proxiedRequest.proxyRequestIndex,
+              lane: proxiedRequest.lane,
+              requestFamilyFingerprint: proxiedRequest.requestFamilyFingerprint,
+              statusCode: upstreamResponse.statusCode,
+              ...responseSummary,
+            });
+          });
         }
       );
       upstreamRequest.on("error", (error) => {
@@ -114,4 +174,7 @@ http
   .listen(port, "127.0.0.1", () => {
     console.log(`Claude context proxy listening on http://127.0.0.1:${port}`);
     console.log(`Writing structural summaries to ${logPath}`);
+    console.log(
+      `Fingerprint run ${fingerprintRunId}; fingerprints compare only within this proxy process.`
+    );
   });

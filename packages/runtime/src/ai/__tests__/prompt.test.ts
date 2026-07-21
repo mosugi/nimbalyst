@@ -65,6 +65,8 @@ describe('buildClaudeCodeSystemPrompt', () => {
     });
     expect(outOfBand).not.toContain('### Name guidelines');
     expect(outOfBand).toContain('do NOT set `name`');
+    expect(outOfBand).toContain('Tags and phase are NOT auto-assigned');
+    expect(outOfBand).toContain('call this tool early in your first turn');
     expect(outOfBand).toContain('### Commit tracking');
   });
 

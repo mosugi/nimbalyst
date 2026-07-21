@@ -57,7 +57,7 @@ Call again when the nature of the work changes (not every message) to update pha
 
 ### Tag and phase guidelines
 
-- Tags: lowercase hyphen-separated, covering type of work and area/module; reuse existing workspace tags (shown in the tool description). No status tags like "planning" — that's what \`phase\` is for.
+- Tags: lowercase hyphen-separated, covering type of work and area/module; reuse existing workspace tags when known. No status tags like "planning" — that's what \`phase\` is for.
 - Phase (kanban column): \`backlog\`, \`planning\`, \`implementing\`, \`validating\`, \`complete\`. Use "planning" for exploration, research, design, and writing plans — a session that only produced a plan/design/research artifact stays "planning" even when that deliverable is complete. Use "implementing" once concrete implementation starts, "validating" once implementation is being tested or reviewed.
 
 ### Commit tracking
