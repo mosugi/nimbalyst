@@ -1028,7 +1028,7 @@ function createExtensionContext(
       sendPrompt: async (options: {
         prompt: string;
         sessionName?: string;
-        provider?: 'claude-code' | 'claude' | 'openai';
+        provider?: 'claude-code' | 'claude' | 'openai' | 'openai-codex';
         model?: string;
       }): Promise<{ sessionId: string; response: string }> => {
         const electronAPI = (window as any).electronAPI;

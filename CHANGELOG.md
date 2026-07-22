@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- OpenAI Codex automations now use the signed-in ChatGPT subscription, report failures accurately, and prevent overlapping duplicate runs.
 - Interrupting a Claude Agent session no longer lets a permission-gated tool run anyway after the interrupt.
 - The Find menu command now opens Monaco's native find widget in code files instead of crashing the markdown search bar.
 - Reopening a shared tracker item shows its content again instead of a loading overlay that never clears.
