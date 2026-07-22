@@ -295,20 +295,23 @@ const AgentTranscriptPanelComponent = React.forwardRef<
     }
   }, [sessionId]);
 
-  // Listen for file tracking updates and refresh
+  // Listen for file tracking updates and refresh.
+  //
+  // Unsubscribe via the closure `on()` returns -- never by passing the callback
+  // back to an `off(channel, callback)` API. Electron's contextBridge re-proxies
+  // a renderer function on every crossing, so identity-based removal silently
+  // does nothing. This panel is keyed by session id, so each session switch
+  // remounts it; with the old `off()` call that leaked one listener per switch
+  // (issue #943 / NIM-2019).
   useEffect(() => {
     if (typeof window === 'undefined' || !(window as any).electronAPI) {
       return;
     }
 
-    // Register listener
-    (window as any).electronAPI.on('session-files:updated', handleFileUpdate);
+    const unsubscribe = (window as any).electronAPI.on('session-files:updated', handleFileUpdate);
 
-    // Cleanup
     return () => {
-      if ((window as any).electronAPI?.off) {
-        (window as any).electronAPI.off('session-files:updated', handleFileUpdate);
-      }
+      unsubscribe?.();
     };
   }, [handleFileUpdate]);
 

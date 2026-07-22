@@ -57,6 +57,9 @@ interface RecentlyDeletedEntry {
 const recentlyDeletedEntries = new Map<string, RecentlyDeletedEntry>();
 const RECENTLY_DELETED_FALLBACK_MS = 5 * 60 * 1000;
 
+/** Renderer crashes seen this run; logged so repeat crashes are distinguishable from a one-off. */
+let rendererCrashCount = 0;
+
 export function markRecentlyDeleted(filePath: string): void {
     // If already tracked, refresh the fallback timer.
     const existing = recentlyDeletedEntries.get(filePath);
@@ -586,9 +589,28 @@ export function createWindow(
             showWindow();
         });
 
-        // Handle renderer process crashes
+        // Handle renderer process crashes.
+        //
+        // Log the fields explicitly rather than relying on the crash reporter:
+        // when a user files a crash report (issue #943) the reason/exitCode and
+        // the memory footprint at the time are the whole diagnosis, and a
+        // reloaded window loses the renderer's state forever.
         window.webContents.on('render-process-gone', (event, details) => {
-            console.error('[MAIN] Renderer process gone:', details);
+            rendererCrashCount++;
+            const memory = process.memoryUsage();
+            console.error(
+                '[MAIN] Renderer process gone:',
+                {
+                    reason: details.reason,
+                    exitCode: details.exitCode,
+                    crashCountThisRun: rendererCrashCount,
+                    uptimeSeconds: Math.round(process.uptime()),
+                    mainRssMb: Math.round(memory.rss / 1024 / 1024),
+                    mainHeapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+                    windowId: window.id,
+                    url: window.webContents.getURL(),
+                }
+            );
             if (!window.isDestroyed()) {
                 // Reload the window
                 window.reload();

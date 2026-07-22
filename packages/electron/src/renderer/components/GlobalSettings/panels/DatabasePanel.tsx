@@ -186,15 +186,14 @@ export function DatabasePanel(): React.ReactElement {
       setMigrationRunning(false);
       setMigrationFailure(payload);
     };
-    window.electronAPI.on('db:migration:phase', onPhase);
-    window.electronAPI.on('db:migration:progress', onProgress);
-    window.electronAPI.on('db:migration:complete', onComplete);
-    window.electronAPI.on('db:migration:failed', onFailed);
+    const unsubscribes = [
+      window.electronAPI.on('db:migration:phase', onPhase),
+      window.electronAPI.on('db:migration:progress', onProgress),
+      window.electronAPI.on('db:migration:complete', onComplete),
+      window.electronAPI.on('db:migration:failed', onFailed),
+    ];
     return () => {
-      window.electronAPI?.off?.('db:migration:phase', onPhase);
-      window.electronAPI?.off?.('db:migration:progress', onProgress);
-      window.electronAPI?.off?.('db:migration:complete', onComplete);
-      window.electronAPI?.off?.('db:migration:failed', onFailed);
+      unsubscribes.forEach(unsubscribe => unsubscribe());
     };
   }, []);
 

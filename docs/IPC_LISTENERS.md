@@ -6,6 +6,10 @@ The forbidden pattern is reaching `electronAPI.on` from a `useEffect`, custom ho
 
 A subscription installed exactly once -- at module load or via an install-once guard -- has none of those problems. Such "singleton subscriptions" are allowed in `store/listeners/`, `store/atoms/`, `store/sessionStateListeners.ts`, `services/`, `plugins/`, and `extensions/panels/` (see "Sanctioned singleton subscriptions" below). They are NOT allowed inside component files, even at module scope -- a component file gets imported because someone renders the component, which re-blurs the line between "component-level" and "module-level" subscription. Put singletons in one of the sanctioned directories.
 
+**Unsubscribe with the closure `electronAPI.on(...)` returns. There is no `off(channel, callback)`.**
+
+It was removed in the fix for [#943](https://github.com/nimbalyst/nimbalyst/issues/943). With `contextIsolation: true` Electron hands the preload a *fresh proxy* of the renderer's callback on every crossing, so an `off()` that looks the handler up by callback identity can never find it — every call was a silent no-op. That leaked one `session-files:updated` listener per session switch until a user's renderer crashed after 44 hours of uptime. The returned closure captures the real handler directly, so nothing has to cross the bridge to remove it.
+
 All non-singleton IPC event handling follows this architecture:
 
 1. **Central listeners** subscribe to IPC events ONCE at app startup
@@ -20,8 +24,8 @@ useEffect(() => {
   const handler = (data) => {
     setLocalState(data);
   };
-  window.electronAPI.on('some:event', handler);
-  return () => window.electronAPI.off('some:event', handler);
+  const unsubscribe = window.electronAPI.on('some:event', handler);
+  return () => unsubscribe();
 }, []);
 
 // GOOD: Central listener updates atom, component reads atom
@@ -170,3 +174,4 @@ When you add another singleton subscription, put it in one of these directories 
 | No debouncing on rapid events | Performance issues | Debounce in listener |
 | Reacting to a counter/request atom without skipping the initial mount value | Side effect runs on every refresh, not just on the IPC event | Capture the initial value in a ref and bail out when it matches |
 | Module-level `electronAPI.on()` inside a component file (even outside any hook) | Component files get re-imported (HMR, lazy routes, tests) and the subscription quietly multiplies | Move the singleton into `store/listeners/`, `store/atoms/`, or one of the other sanctioned directories above |
+| Unsubscribing by passing the callback back (`off(channel, callback)`) | contextBridge re-proxies the callback on every crossing, so identity-based removal never matches and the listener leaks | Call the closure `on()` returns |

@@ -1659,8 +1659,14 @@ interface ElectronAPI {
   // Generic IPC methods for services
   invoke: (channel: string, ...args: any[]) => Promise<any>;
   send: (channel: string, ...args: any[]) => void;
+  /**
+   * Subscribe to an IPC channel. Call the returned closure to unsubscribe.
+   *
+   * There is no `off(channel, callback)` counterpart on purpose: contextBridge
+   * re-proxies the callback on every crossing, so identity-based removal never
+   * matches and the listener leaks (issue #943 / NIM-2019).
+   */
   on: (channel: string, callback: (...args: any[]) => void) => () => void;
-  off: (channel: string, callback: (...args: any[]) => void) => void;
 }
 
 interface InstalledExtension {
