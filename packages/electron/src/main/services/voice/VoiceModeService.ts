@@ -22,6 +22,8 @@ import { getSessionSummaryForVoice } from './sessionSummary';
 import { getDatabase } from '../../database/initialize';
 import { getDefaultAIModel, getPreferredAgentLanguage } from '../../utils/store';
 import { randomUUID } from 'crypto';
+import { resolveSessionModelSelection } from '../ai/sessionModelSelection';
+import { buildVoiceTaskCompletion } from './voiceTaskCompletion';
 
 // Store active voice session info
 interface VoiceSession {
@@ -734,8 +736,10 @@ export function initVoiceModeService() {
           }
 
           const newSessionId = randomUUID();
-          const provider = 'claude-code';
-          const model = getDefaultAIModel() || 'claude-code:opus-1m';
+          const { provider, model } = resolveSessionModelSelection(
+            'claude-code',
+            getDefaultAIModel() || 'claude-code:opus-1m',
+          );
           const newTitle = title?.trim() || 'New Session';
 
           await AISessionsRepository.create({
@@ -850,7 +854,7 @@ export function initVoiceModeService() {
 
               // Set up a one-time listener for the response via ipcMain
               // This listens for the same event that submit_agent_prompt uses
-              const responseHandler = (_event: any, data: { sessionId: string; summary: string }) => {
+              const responseHandler = (_event: any, data: { sessionId: string; summary?: string; error?: string }) => {
                 if (data.sessionId === targetSessionId) {
                   // Clean up
                   ipcMain.removeListener('voice-mode:agent-task-complete', responseHandler);
@@ -862,6 +866,11 @@ export function initVoiceModeService() {
                     summaryLength: data.summary?.length,
                     summaryPreview: data.summary?.substring(0, 500),
                   });
+
+                  if (data.error) {
+                    resolve({ success: false, error: data.error });
+                    return;
+                  }
 
                   // Truncate the answer for the voice context window.
                   // gpt-realtime struggles with very long function results.
@@ -929,11 +938,12 @@ export function initVoiceModeService() {
       // and can notify the voice assistant.
       // IMPORTANT: Skip this when ask_coding_agent is in-flight because
       // that path returns the response via the function call result instead.
-      const completionListener = (_event: any, data: { sessionId: string; summary?: string }) => {
+      const completionListener = (_event: any, data: { sessionId: string; summary?: string; error?: string }) => {
         console.log('[VoiceModeService] agent-task-complete received:', {
           sessionId: data.sessionId,
           summaryLength: data.summary?.length ?? 0,
           summaryPreview: data.summary?.substring(0, 200) ?? '(empty)',
+          error: data.error,
           askCodingAgentInFlight,
         });
 
@@ -944,34 +954,23 @@ export function initVoiceModeService() {
             return;
           }
 
-          // Truncate the summary to stay within the realtime context limits.
-          const trimmed = (data.summary ?? '').trim();
-          const truncatedSummary = trimmed.length > 1500
-            ? trimmed.substring(0, 1500) + '... (truncated)'
-            : trimmed;
+          const completion = buildVoiceTaskCompletion(data);
 
           // Async (deferred) path (gpt-realtime-2): if a submit_agent_prompt call
           // is still open, resolve it with the real summary -- the agent receives
           // the result as the tool's return value and relays it. No injected wake.
           if (poc.hasDeferredCall()) {
-            const resolved = poc.resolveDeferredCall({
-              success: true,
-              summary: truncatedSummary || 'The coding agent finished but did not produce a text summary.',
-            });
+            const resolved = poc.resolveDeferredCall(completion.deferredResult);
             if (resolved) {
-              console.log('[VoiceModeService] Resolved deferred submit_agent_prompt with summary');
+              console.log('[VoiceModeService] Resolved deferred submit_agent_prompt');
               return;
             }
           }
 
           // Fallback path (gpt-realtime, or no open deferred call): inject an
-          // [INTERNAL: Task complete] wake message for the voice agent to relay.
-          const completionMessage = truncatedSummary.length > 0
-            ? `[INTERNAL: Task complete. Result: ${truncatedSummary}]`
-            : '[INTERNAL: Task complete. The coding agent finished but did not produce a text summary.]';
-
-          console.log('[VoiceModeService] Sending completion to voice agent:', completionMessage.substring(0, 300));
-          poc.sendUserMessage(completionMessage);
+          // internal wake message for the voice agent to relay.
+          console.log('[VoiceModeService] Sending completion to voice agent:', completion.fallbackMessage.substring(0, 300));
+          poc.sendUserMessage(completion.fallbackMessage);
         }
       };
       ipcMain.on('voice-mode:agent-task-complete', completionListener);
