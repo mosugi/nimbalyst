@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- The desktop app now runs on Electron 43, and file and folder pickers open in the active workspace or their last-used directory instead of defaulting to Downloads.
 - Updated the bundled Claude Agent engine to Claude Code 2.1.215; subagents no longer spawn their own nested subagents by default, and the number running at once is now capped.
 
 ### Fixed

@@ -136,11 +136,9 @@
   "allowScripts": {
     "@fortawesome/fontawesome-free@5.15.4": true,
     "@vscode/ripgrep@1.17.1": true,
-    "better-sqlite3@12.11.1": true,
-    "better-sqlite3@12.10.0": true,
+    "better-sqlite3@13.0.1": true,
     "bufferutil@4.1.0": true,
     "core-js@3.48.0": true,
-    "electron@41.8.0": true,
     "esbuild@0.25.12": true,
     "esbuild@0.27.7": true,
     "esbuild@0.27.3": true,

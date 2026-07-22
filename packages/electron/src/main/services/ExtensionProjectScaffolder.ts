@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { basename, dirname, join } from 'path';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs';
 import { templates } from '../../../../extensions/extension-dev-kit/src/templates.ts';
@@ -9,6 +9,7 @@ import {
   isExtensionProjectIntroShown,
   setExtensionProjectIntroShown,
 } from '../utils/store';
+import { getDialogDefaultPath, rememberDialogSelection } from '../utils/dialogPaths';
 
 const DEFAULT_EXTENSION_TEMPLATE = 'starter';
 
@@ -155,7 +156,9 @@ export async function showNewExtensionProjectDialog(sourceWindow?: BrowserWindow
     return;
   }
 
-  const defaultPath = join(app.getPath('documents'), 'my-nimbalyst-extension');
+  const defaultPath = getDialogDefaultPath({
+    suggestedName: 'my-nimbalyst-extension',
+  });
   const projectResult = sourceWindow
     ? await dialog.showSaveDialog(sourceWindow, {
       title: 'Create New Extension Project',
@@ -173,6 +176,8 @@ export async function showNewExtensionProjectDialog(sourceWindow?: BrowserWindow
   if (projectResult.canceled || !projectResult.filePath) {
     return;
   }
+
+  rememberDialogSelection(projectResult.filePath, 'file');
 
   const projectPath = projectResult.filePath;
 

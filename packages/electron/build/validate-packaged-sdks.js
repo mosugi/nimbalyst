@@ -381,9 +381,14 @@ const WORKER_BUNDLES = [
     bundle: 'sqlite-worker.bundle.js',
     externals: ['better-sqlite3'],
     nativeBinaries: [
-      // better-sqlite3 loads via `bindings(...)` -> require of a .node file.
-      // Verify the .node exists where bindings will find it.
-      { relPath: 'node_modules/better-sqlite3/build/Release/better_sqlite3.node' },
+      // v13 loads an N-API prebuild directly; keep the legacy build path as a
+      // fallback for source-built packages.
+      {
+        candidateRelPaths: [
+          `node_modules/better-sqlite3/prebuilds/${targetPlatform}-${targetArch}.node`,
+          'node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+        ],
+      },
     ],
   },
   {
@@ -442,16 +447,17 @@ for (const wb of WORKER_BUNDLES) {
   }
 
   for (const nb of wb.nativeBinaries) {
-    const nbPath = path.join(resourcesRoot, nb.relPath);
-    if (!fs.existsSync(nbPath)) {
+    const candidatePaths = nb.candidateRelPaths.map((relPath) => path.join(resourcesRoot, relPath));
+    const nbPath = candidatePaths.find((candidatePath) => fs.existsSync(candidatePath));
+    if (!nbPath) {
       failures.push({
         kind: 'worker-native',
-        target: `${wb.bundle} -> ${nb.relPath}`,
-        reason: `native binary missing at ${nbPath}`,
+        target: `${wb.bundle} -> ${nb.candidateRelPaths.join(' OR ')}`,
+        reason: `native binary missing at ${candidatePaths.join(' OR ')}`,
       });
       continue;
     }
-    console.log(`  [ok] ${wb.bundle} native ${nb.relPath}`);
+    console.log(`  [ok] ${wb.bundle} native ${path.relative(resourcesRoot, nbPath)}`);
   }
 }
 

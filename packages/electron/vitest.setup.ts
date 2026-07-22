@@ -18,7 +18,14 @@ if (!process.env.NIMBALYST_BETTER_SQLITE3_NATIVE) {
   );
   if (fs.existsSync(cached)) {
     const p = fs.readFileSync(cached, 'utf-8').trim();
-    if (p && fs.existsSync(p)) {
+    const betterSqlitePackage = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, 'node_modules', 'better-sqlite3', 'package.json'),
+        'utf-8',
+      ),
+    );
+    const expectedBinaryName = `better_sqlite3-v${betterSqlitePackage.version}-modules${process.versions.modules}-${process.platform}-${process.arch}.node`;
+    if (p && path.basename(p) === expectedBinaryName && fs.existsSync(p)) {
       process.env.NIMBALYST_BETTER_SQLITE3_NATIVE = p;
     }
   }
