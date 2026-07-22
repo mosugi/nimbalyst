@@ -30,7 +30,7 @@ import {
   $approveDiffs,
   $rejectDiffs
 } from '@nimbalyst/runtime';
-import { $getRoot, $getSelection, $isRangeSelection, SKIP_SCROLL_INTO_VIEW_TAG, SKIP_DOM_SELECTION_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
+import { $getRoot, $getSelection, $isRangeSelection, $setSelection, SKIP_SCROLL_INTO_VIEW_TAG, SKIP_DOM_SELECTION_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 // Side-effect import: registers GenericFrontmatterHeader with DocumentHeaderRegistry
 import '@nimbalyst/runtime/plugins/FrontmatterPlugin';
@@ -722,6 +722,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const tReparseStart = performance.now();
           editorRef.current.update(() => {
             const tInsideUpdateStart = performance.now();
+            // Clearing a selected node without moving selection first makes
+            // Lexical throw "selection has been lost ..." (NIM-2005).
+            $setSelection(null);
             const root = $getRoot();
             root.clear();
             const tAfterClear = performance.now();
@@ -887,6 +890,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 const transformers = getEditorTransformers();
 
                 editorRef.current.update(() => {
+                  // Clearing a selected node without moving selection first makes
+                  // Lexical throw "selection has been lost ..." (NIM-2005).
+                  $setSelection(null);
                   const root = $getRoot();
                   root.clear();
                   $convertFromEnhancedMarkdownString(diskContent, transformers);
@@ -1182,6 +1188,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             if (isMarkdown) {
               const transformers = getEditorTransformers();
               editorRef.current.update(() => {
+                // Clearing a selected node without moving selection first makes
+                // Lexical throw "selection has been lost ..." (NIM-2005).
+                $setSelection(null);
                 const root = $getRoot();
                 root.clear();
                 $convertFromEnhancedMarkdownString(content, transformers);
@@ -1268,6 +1277,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               const transformers = getEditorTransformers();
               diffTrace('TabEditor.applyDiffState resetting editor to oldContent', { filePath, oldLen: oldContent.length, t: performance.now() });
               editorRef.current.update(() => {
+                // Clearing a selected node without moving selection first makes
+                // Lexical throw "selection has been lost ..." (NIM-2005).
+                $setSelection(null);
                 const root = $getRoot();
                 root.clear();
                 $convertFromEnhancedMarkdownString(oldContent, transformers);
@@ -1453,6 +1465,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               // For Lexical (markdown), we need to clear diff nodes and reload content
               const transformers = getEditorTransformers();
               editorRef.current?.update(() => {
+                // Clearing a selected node without moving selection first makes
+                // Lexical throw "selection has been lost ..." (NIM-2005).
+                $setSelection(null);
                 const root = $getRoot();
                 root.clear();
                 $convertFromEnhancedMarkdownString(newContent, transformers);
@@ -1497,6 +1512,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const transformers = getEditorTransformers();
 
           editorRef.current.update(() => {
+            // Clearing a selected node without moving selection first makes
+            // Lexical throw "selection has been lost ..." (NIM-2005).
+            $setSelection(null);
             const root = $getRoot();
             root.clear();
             $convertFromEnhancedMarkdownString(newContent, transformers);
@@ -1537,6 +1555,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             const transformers = getEditorTransformers();
 
             editorRef.current.update(() => {
+              // Clearing a selected node without moving selection first makes
+              // Lexical throw "selection has been lost ..." (NIM-2005).
+              $setSelection(null);
               const root = $getRoot();
               root.clear();
               $convertFromEnhancedMarkdownString(newContent, transformers);
@@ -1705,6 +1726,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               const transformers = getEditorTransformers();
 
               editorRef.current.update(() => {
+                // Clearing a selected node without moving selection first makes
+                // Lexical throw "selection has been lost ..." (NIM-2005).
+                $setSelection(null);
                 const root = $getRoot();
                 root.clear();
                 $convertFromEnhancedMarkdownString(finalContent, transformers);
@@ -2625,6 +2649,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     if (isMarkdown) {
                       const transformers = getEditorTransformers();
                       editorRef.current.update(() => {
+                        // Clearing a selected node without moving selection first makes
+                        // Lexical throw "selection has been lost ..." (NIM-2005).
+                        $setSelection(null);
                         const root = $getRoot();
                         root.clear();
                         $convertFromEnhancedMarkdownString(diskContent, transformers);

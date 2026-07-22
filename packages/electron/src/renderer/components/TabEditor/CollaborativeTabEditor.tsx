@@ -51,7 +51,7 @@ import {
   registerCollabHistoryController,
   type CollabHistoryController,
 } from '../../store/atoms/collabHistoryControllers';
-import { $getRoot, type LexicalEditor } from 'lexical';
+import { $getRoot, $setSelection, type LexicalEditor } from 'lexical';
 import type { EditorHost, ExtensionStorage } from '@nimbalyst/runtime';
 import type { CollabDocumentConfig } from '../../utils/collabDocumentOpener';
 import { resolveCollabConfigForUri } from '../../utils/collabDocumentOpener';
@@ -1354,6 +1354,9 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
         if (!editor) return;
         const markdown = decoder.decode(plaintext);
         editor.update(() => {
+          // Clearing a selected node without moving selection first makes
+          // Lexical throw "selection has been lost ..." (NIM-2005).
+          $setSelection(null);
           const root = $getRoot();
           root.clear();
           $convertFromEnhancedMarkdownString(markdown, getEditorTransformers());
