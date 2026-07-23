@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 <!-- Bug fixes go here -->
 - Stopping a Codex agent session now reliably cancels it instead of bouncing back to "running".
+- SQLite databases open in the browser again instead of failing while loading the database engine.
 
 ### Removed
 <!-- Removed features go here -->
