@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Sharing a markdown document to your team now offers to share the documents it embeds, and teammates see those embeds live inline.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
