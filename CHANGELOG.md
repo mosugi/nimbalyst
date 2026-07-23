@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- Quick Open now puts Memory search at the end with clear Docs, Trackers, and Sessions scopes while keeping exact tracker lookup and file-content search distinct.
 
 ### Fixed
 <!-- Bug fixes go here -->

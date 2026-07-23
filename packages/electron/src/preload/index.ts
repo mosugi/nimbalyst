@@ -889,7 +889,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Global semantic search (nimbalyst-memory engine). Returns empty / false when
-  // the memory extension is disabled so the Quick Open Search tab can hide.
+  // the memory extension is disabled so the Quick Open Memory tab can hide.
   semanticSearch: {
     isAvailable: (workspacePath: string) =>
       ipcRenderer.invoke('semantic-search:available', workspacePath) as Promise<boolean>,
