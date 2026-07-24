@@ -44,7 +44,10 @@ import {
   workstreamStateAtom,
   workstreamActiveChildAtom,
   workstreamFilesSidebarVisibleAtom,
+  workstreamRightPanelModeAtom,
   toggleWorkstreamFilesSidebarAtom,
+  setWorkstreamRightPanelModeAtom,
+  type AgentRightPanelMode,
 } from '../../store/atoms/workstreamState';
 import { blitzAnalysisCreatedAtom } from '../../store/atoms/blitz';
 import { initSessionStateListeners, updateSessionStateListenerWorkspace } from '../../store/sessionStateListeners';
@@ -82,7 +85,14 @@ export interface AgentModeRef {
   reopenLastClosedSession: () => void;
   nextTab: () => void;
   previousTab: () => void;
-  toggleReviewPanel: () => void;
+  toggleRightPanel: () => void;
+  showRightPanel: (mode: AgentRightPanelMode) => void;
+}
+
+export interface AgentModePanelState {
+  available: boolean;
+  visible: boolean;
+  mode: AgentRightPanelMode;
 }
 
 export interface AgentModeProps {
@@ -94,7 +104,7 @@ export interface AgentModeProps {
   onReady?: () => void;
   onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
   onOpenSessionInChat?: (sessionId: string) => void;
-  onPanelStateChange?: (state: { available: boolean; reviewVisible: boolean }) => void;
+  onPanelStateChange?: (state: AgentModePanelState) => void;
 }
 
 /**
@@ -145,8 +155,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const selectedWorkstreamId = selectedWorkstream?.id ?? null;
   const setSelectedWorkstream = useSetAtom(setSelectedWorkstreamAtom);
   const toggleFilesSidebar = useSetAtom(toggleWorkstreamFilesSidebarAtom);
-  const reviewPanelVisible = useAtomValue(
+  const setRightPanelMode = useSetAtom(setWorkstreamRightPanelModeAtom);
+  const rightPanelVisible = useAtomValue(
     workstreamFilesSidebarVisibleAtom(selectedWorkstreamId ?? '__no_workstream__'),
+  );
+  const rightPanelMode = useAtomValue(
+    workstreamRightPanelModeAtom(selectedWorkstreamId ?? '__no_workstream__'),
   );
   const selectedAgentRoleAtom = useMemo(
     () => (selectedWorkstreamId ? sessionAgentRoleAtom(selectedWorkstreamId) : atom<'standard'>('standard')),
@@ -158,12 +172,14 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   useEffect(() => {
     onPanelStateChange?.({
       available: selectedWorkstreamId !== null && !isSelectedMetaAgent,
-      reviewVisible: selectedWorkstreamId !== null && !isSelectedMetaAgent && reviewPanelVisible,
+      visible: selectedWorkstreamId !== null && !isSelectedMetaAgent && rightPanelVisible,
+      mode: rightPanelMode,
     });
   }, [
     isSelectedMetaAgent,
     onPanelStateChange,
-    reviewPanelVisible,
+    rightPanelVisible,
+    rightPanelMode,
     selectedWorkstreamId,
   ]);
 
@@ -549,9 +565,17 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     previousTab: () => {
       // TODO: Implement tab navigation
     },
-    toggleReviewPanel: () => {
+    toggleRightPanel: () => {
       if (selectedWorkstreamId && !isSelectedMetaAgent) {
         toggleFilesSidebar(selectedWorkstreamId);
+      }
+    },
+    showRightPanel: (mode: AgentRightPanelMode) => {
+      if (selectedWorkstreamId && !isSelectedMetaAgent) {
+        setRightPanelMode({ workstreamId: selectedWorkstreamId, mode });
+        if (!rightPanelVisible) {
+          toggleFilesSidebar(selectedWorkstreamId);
+        }
       }
     },
   }), [
@@ -559,7 +583,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     dispatchCreateNewWorktreeSession,
     dispatchOpenSessionInTab,
     isSelectedMetaAgent,
+    rightPanelVisible,
     selectedWorkstreamId,
+    setRightPanelMode,
     toggleFilesSidebar,
   ]);
 

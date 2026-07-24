@@ -48,7 +48,11 @@ import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager
 import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
 import { DeveloperDashboard } from './components/DeveloperDashboard/DeveloperDashboard';
-import { AgentMode, type AgentModeRef } from './components/AgentMode';
+import {
+  AgentMode,
+  type AgentModePanelState,
+  type AgentModeRef,
+} from './components/AgentMode';
 import { ChatSidebar, type ChatSidebarRef } from './components/ChatSidebar';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { TabsProvider } from './contexts/TabsContext';
@@ -578,9 +582,10 @@ export default function App() {
     busyAction: 'pull' | 'push' | null;
     feedback: { kind: 'success' | 'error'; message: string } | null;
   }>({ busyAction: null, feedback: null });
-  const [agentPanelState, setAgentPanelState] = useState({
+  const [agentPanelState, setAgentPanelState] = useState<AgentModePanelState>({
     available: false,
-    reviewVisible: false,
+    visible: false,
+    mode: 'edited-files',
   });
   const [collabPanelState, setCollabPanelState] = useState({
     sidebarCollapsed: false,
@@ -595,7 +600,7 @@ export default function App() {
 
   useEffect(() => {
     setCollabPanelState({ sidebarCollapsed: false, chatCollapsed: false });
-    setAgentPanelState({ available: false, reviewVisible: false });
+    setAgentPanelState({ available: false, visible: false, mode: 'edited-files' });
     setGitActionState({ busyAction: null, feedback: null });
   }, [workspacePath]);
 
@@ -966,7 +971,7 @@ export default function App() {
     if (activeMode === 'files') {
       editorModeRef.current?.toggleAIChatCollapsed();
     } else if (activeMode === 'agent') {
-      agentModeRef.current?.toggleReviewPanel();
+      agentModeRef.current?.toggleRightPanel();
     } else if (activeMode === 'collab') {
       collabModeRef.current?.toggleChatCollapsed();
     }
@@ -1007,29 +1012,45 @@ export default function App() {
         },
         right: agentPanelState.available ? {
           label: 'Agent right panel',
-          collapsed: !agentPanelState.reviewVisible,
+          collapsed: !agentPanelState.visible,
           onToggle: toggleActiveRightPane,
           options: [
             {
               id: 'hidden',
               label: 'Hidden',
               icon: 'dock_to_left',
-              selected: !agentPanelState.reviewVisible,
+              selected: !agentPanelState.visible,
               onSelect: () => {
-                if (agentPanelState.reviewVisible) {
-                  agentModeRef.current?.toggleReviewPanel();
+                if (agentPanelState.visible) {
+                  agentModeRef.current?.toggleRightPanel();
                 }
               },
             },
             {
-              id: 'review',
-              label: 'Review changes',
-              icon: 'difference',
-              selected: agentPanelState.reviewVisible,
+              id: 'edited-files',
+              label: 'Edited Files',
+              icon: 'description',
+              selected: agentPanelState.visible && agentPanelState.mode === 'edited-files',
               onSelect: () => {
-                if (!agentPanelState.reviewVisible) {
-                  agentModeRef.current?.toggleReviewPanel();
-                }
+                agentModeRef.current?.showRightPanel('edited-files');
+              },
+            },
+            {
+              id: 'review',
+              label: 'Review',
+              icon: 'rate_review',
+              selected: agentPanelState.visible && agentPanelState.mode === 'review',
+              onSelect: () => {
+                agentModeRef.current?.showRightPanel('review');
+              },
+            },
+            {
+              id: 'session-chat',
+              label: 'Chat with Session',
+              icon: 'forum',
+              selected: agentPanelState.visible && agentPanelState.mode === 'session-chat',
+              onSelect: () => {
+                agentModeRef.current?.showRightPanel('session-chat');
               },
             },
           ],

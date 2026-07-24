@@ -219,9 +219,8 @@ describe('WindowTopBar', () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('selects the agent review surface from the right-panel dropdown', () => {
-    const onHide = vi.fn();
-    const onReview = vi.fn();
+  it('selects an Agent right-panel mode from the window top-bar dropdown', () => {
+    const onChat = vi.fn();
     render(
       <WindowTopBar
         workspaceName="Repo"
@@ -235,22 +234,36 @@ describe('WindowTopBar', () => {
         panelControls={{
           right: {
             label: 'Agent right panel',
-            collapsed: true,
+            collapsed: false,
             onToggle: () => {},
             options: [
               {
                 id: 'hidden',
                 label: 'Hidden',
                 icon: 'dock_to_left',
+                selected: false,
+                onSelect: () => {},
+              },
+              {
+                id: 'edited-files',
+                label: 'Edited Files',
+                icon: 'description',
                 selected: true,
-                onSelect: onHide,
+                onSelect: () => {},
               },
               {
                 id: 'review',
-                label: 'Review changes',
-                icon: 'difference',
+                label: 'Review',
+                icon: 'rate_review',
                 selected: false,
-                onSelect: onReview,
+                onSelect: () => {},
+              },
+              {
+                id: 'session-chat',
+                label: 'Chat with Session',
+                icon: 'forum',
+                selected: false,
+                onSelect: onChat,
               },
             ],
           },
@@ -259,8 +272,9 @@ describe('WindowTopBar', () => {
     );
 
     fireEvent.click(screen.getByTestId('window-top-bar-right-pane'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Review changes' }));
-    expect(onReview).toHaveBeenCalledTimes(1);
-    expect(onHide).not.toHaveBeenCalled();
+    expect(screen.getByRole('menuitem', { name: 'Edited Files' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Review' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Chat with Session' }));
+    expect(onChat).toHaveBeenCalledTimes(1);
   });
 });
