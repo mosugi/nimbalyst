@@ -321,12 +321,14 @@ export function WindowTopBar({
         </div>
 
         <div className="window-top-bar__right">
-          <div
-            className="window-top-bar__git-slot"
-            data-testid="window-top-bar-git-slot"
-          >
-            <GitStatusMenu gitStatus={gitStatus} actions={gitActions} />
-          </div>
+          {gitStatus && (
+            <div
+              className="window-top-bar__git-slot"
+              data-testid="window-top-bar-git-slot"
+            >
+              <GitStatusMenu gitStatus={gitStatus} actions={gitActions} />
+            </div>
+          )}
 
           <div
             className="window-top-bar__right-actions"

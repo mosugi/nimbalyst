@@ -33,7 +33,8 @@ describe('WindowTopBar', () => {
     expect(root.getAttribute('style')).toContain('height: 38px');
     expect(screen.getByTestId('window-top-bar-workspace-name').textContent).toBe('Timely Nebula');
     expect(screen.getByTestId('window-top-bar-mode-label').textContent).toBe('Shared Docs');
-    expect(screen.getByTestId('window-top-bar-git-status').textContent).toContain('Git unavailable');
+    expect(screen.queryByTestId('window-top-bar-git-status')).toBeNull();
+    expect(screen.queryByTestId('window-top-bar-git-slot')).toBeNull();
   });
 
   it('renders branch, dirty, ahead, and behind state from explicit props', () => {
